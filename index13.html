@@ -13,19 +13,16 @@
 
     <!-- Styles -->
     <style>
-        body { font-family: 'Hanuman', sans-serif, ui-sans-serif, system-ui; background-color: #f3f4f6; }
+        body { font-family: 'Hanuman', sans-serif, ui-sans-serif, system-ui; background-color: #f0f2f5; } /* FB Background Color */
         /* Mobile Optimization */
         input, select, button { touch-action: manipulation; } 
         
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #2563eb; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #1877f2; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .active-nav { background-color: #2563eb; color: white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .inactive-nav { color: #cbd5e1; }
-        .inactive-nav:hover { background-color: #1e293b; color: white; }
         
-        input:focus, select:focus, textarea:focus { border-color: #2563eb; outline: none; ring: 2px; --tw-ring-color: #93c5fd; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
+        input:focus, select:focus, textarea:focus { border-color: #1877f2; outline: none; ring: 2px; --tw-ring-color: #bfdbfe; }
         
         /* Modal Styles */
         #custom-modal { transition: opacity 0.2s ease-in-out; }
@@ -549,47 +546,55 @@
         function renderDashboard() {
             const isAdmin = state.role === 'admin';
             document.getElementById('app').innerHTML = `
-                <div class="flex h-screen bg-gray-100 font-sans overflow-hidden">
-                    <div class="w-64 bg-slate-900 text-white hidden md:flex flex-col shadow-xl z-10">
-                        <div class="p-6 border-b border-slate-700">
-                            <h2 class="text-xl font-bold flex items-center gap-2"><i data-lucide="arrow-right-left" class="text-blue-400"></i> MoneyTransfer</h2>
-                            <p class="text-xs text-slate-400 mt-2">${state.session.user.email} (${state.role})</p>
+                <div class="flex flex-col h-screen bg-gray-100 font-sans">
+                    <!-- Top Header Area (Fixed) -->
+                    <div class="bg-white shadow-sm z-50 sticky top-0">
+                        <!-- Row 1: Logo & Actions -->
+                        <div class="flex justify-between items-center px-4 py-3 border-b border-gray-100">
+                            <h1 class="text-2xl font-black text-blue-600 tracking-tight">MoneyTransfer</h1>
+                            <div class="flex items-center gap-3">
+                                <div class="hidden sm:flex bg-gray-100 px-3 py-1 rounded-full text-xs font-bold text-gray-600 items-center gap-1">
+                                    <i data-lucide="${isAdmin ? 'shield' : 'user'}" class="w-3 h-3"></i>
+                                    ${state.session.user.email.split('@')[0]}
+                                </div>
+                                <button onclick="handleLogout()" class="bg-gray-200 p-2 rounded-full hover:bg-gray-300 transition">
+                                    <i data-lucide="log-out" class="w-5 h-5 text-gray-700"></i>
+                                </button>
+                            </div>
                         </div>
-                        <nav class="flex-1 p-4 space-y-2">
-                            <button onclick="switchTab('quick_withdraw')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'quick_withdraw' ? 'active-nav' : 'inactive-nav'}">
-                                <i data-lucide="zap"></i> ដកប្រាក់រហ័ស
+
+                        <!-- Row 2: Navigation Tabs (Facebook Style) -->
+                        <div class="flex justify-around items-center">
+                            <!-- Quick Withdraw Tab -->
+                            <button onclick="switchTab('quick_withdraw')" class="flex-1 py-3 flex justify-center items-center relative group">
+                                <i data-lucide="zap" class="w-7 h-7 ${state.activeTab === 'quick_withdraw' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
+                                ${state.activeTab === 'quick_withdraw' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
                             </button>
 
+                            <!-- Admin: Deposit Tab -->
                             ${isAdmin ? `
-                            <button onclick="switchTab('deposit')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'deposit' ? 'active-nav' : 'inactive-nav'}">
-                                <i data-lucide="arrow-down-circle"></i> វេរចូល (Deposit)
+                            <button onclick="switchTab('deposit')" class="flex-1 py-3 flex justify-center items-center relative group">
+                                <i data-lucide="arrow-down-circle" class="w-7 h-7 ${state.activeTab === 'deposit' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
+                                ${state.activeTab === 'deposit' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
                             </button>` : ''}
-                            
-                            <button onclick="switchTab('withdraw_reports')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'withdraw_reports' ? 'active-nav' : 'inactive-nav'}">
-                                <i data-lucide="file-text"></i> របាយការណ៍ដកប្រាក់
+
+                            <!-- Reports Tab -->
+                            <button onclick="switchTab('withdraw_reports')" class="flex-1 py-3 flex justify-center items-center relative group">
+                                <i data-lucide="file-text" class="w-7 h-7 ${state.activeTab === 'withdraw_reports' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
+                                ${state.activeTab === 'withdraw_reports' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
                             </button>
-                            
+
+                            <!-- Admin: Settings Tab -->
                             ${isAdmin ? `
-                            <button onclick="switchTab('settings')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'settings' ? 'active-nav' : 'inactive-nav'}">
-                                <i data-lucide="settings"></i> ការកំណត់ (Settings)
+                            <button onclick="switchTab('settings')" class="flex-1 py-3 flex justify-center items-center relative group">
+                                <i data-lucide="menu" class="w-7 h-7 ${state.activeTab === 'settings' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
+                                ${state.activeTab === 'settings' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
                             </button>` : ''}
-                        </nav>
-                        <div class="p-4"><button onclick="handleLogout()" class="flex items-center gap-2 text-red-300 w-full p-2"><i data-lucide="log-out"></i> ចាកចេញ</button></div>
-                    </div>
-                    
-                    <div class="flex-1 flex flex-col h-full overflow-hidden">
-                        <div class="md:hidden bg-slate-900 text-white p-4 flex justify-between shadow-md z-20">
-                            <h2 class="font-bold text-lg">MoneyTransfer</h2>
-                            <button onclick="handleLogout()"><i data-lucide="log-out"></i></button>
                         </div>
-                         <div class="md:hidden bg-slate-800 text-white flex justify-around p-2 text-sm shadow-md z-10 overflow-x-auto whitespace-nowrap">
-                            <button onclick="switchTab('quick_withdraw')" class="p-2 px-4 ${state.activeTab==='quick_withdraw'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">ដកប្រាក់រហ័ស</button>
-                            ${isAdmin ? `<button onclick="switchTab('deposit')" class="p-2 px-4 ${state.activeTab==='deposit'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">វេរចូល</button>` : ''}
-                            <button onclick="switchTab('withdraw_reports')" class="p-2 px-4 ${state.activeTab==='withdraw_reports'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">របាយការណ៍</button>
-                            ${isAdmin ? `<button onclick="switchTab('settings')" class="p-2 px-4 ${state.activeTab==='settings'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">កំណត់</button>`:''}
-                         </div>
-                        <main id="main-content" class="flex-1 overflow-auto p-4 md:p-6 bg-gray-50 pb-20"></main>
                     </div>
+
+                    <!-- Main Content -->
+                    <main id="main-content" class="flex-1 overflow-y-auto bg-gray-100 p-4 pb-20"></main>
                 </div>`;
             lucide.createIcons();
             renderDashboardContent();
@@ -612,9 +617,9 @@
 
             // 1. STANDARD FORM (Only for Deposit or Edit)
             const standardFormHtml = `
-                <div class="bg-white p-4 md:p-8 rounded-xl shadow-xl border border-gray-100 max-w-3xl mx-auto">
-                    <h3 class="text-2xl font-bold mb-6 flex gap-2 items-center text-blue-800 border-b pb-4">
-                        <i data-lucide="edit" class="w-6 h-6"></i> ${isEditing ? 'កែប្រែទិន្នន័យ' : 'បញ្ចូលទិន្នន័យវេរចូល'}
+                <div class="bg-white p-4 md:p-8 rounded-xl shadow-sm border border-gray-100 max-w-3xl mx-auto">
+                    <h3 class="text-xl font-bold mb-6 flex gap-2 items-center text-blue-800 border-b pb-4">
+                        <i data-lucide="edit" class="w-5 h-5"></i> ${isEditing ? 'កែប្រែទិន្នន័យ' : 'បញ្ចូលទិន្នន័យវេរចូល'}
                     </h3>
                     <form id="transaction-form" class="flex flex-col gap-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -667,8 +672,8 @@
                         </div>
 
                         <div class="flex gap-3 mt-4 pt-4 border-t">
-                            <button type="button" onclick="toggleForm()" class="flex-1 py-4 bg-gray-100 text-gray-800 rounded-lg font-bold text-lg hover:bg-gray-200 transition">បោះបង់</button>
-                            <button type="submit" id="submit-tx-btn" class="flex-1 py-4 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition">
+                            <button type="button" onclick="toggleForm()" class="flex-1 py-3 bg-gray-100 text-gray-800 rounded-lg font-bold text-lg hover:bg-gray-200 transition">បោះបង់</button>
+                            <button type="submit" id="submit-tx-btn" class="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 shadow-sm transition">
                                 ${isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក'}
                             </button>
                         </div>
@@ -677,18 +682,18 @@
 
             // 2. QUICK WITHDRAW FORM
             const quickWithdrawFormHtml = `
-                <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl border border-red-50 max-w-xl mx-auto mt-6">
-                    <h3 class="text-2xl font-bold mb-6 flex gap-2 items-center text-red-600 border-b border-red-100 pb-4">
-                        <i data-lucide="zap" class="w-7 h-7 fill-red-100"></i> ដកប្រាក់រហ័ស
+                <div class="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-gray-200 max-w-xl mx-auto mt-2">
+                    <h3 class="text-xl font-bold mb-6 flex gap-2 items-center text-gray-800 border-b border-gray-100 pb-4">
+                        <i data-lucide="zap" class="w-6 h-6 text-blue-600"></i> ដកប្រាក់រហ័ស
                     </h3>
                     <form id="transaction-form" class="flex flex-col gap-6">
-                        <div class="flex flex-col gap-2">
+                        <div class="flex flex-col gap-3">
                             <label class="text-lg font-bold text-gray-700 text-center">បញ្ចូលលេខវិក្កយបត្រ (Invoice)</label>
-                            <input type="text" id="withdraw_invoice" class="w-full p-6 border-2 border-gray-300 rounded-2xl text-3xl text-center font-mono focus:border-red-500 focus:ring-4 focus:ring-red-100 outline-none transition uppercase" placeholder="INV..." required inputmode="text">
+                            <input type="text" id="withdraw_invoice" class="w-full p-5 border-2 border-gray-300 rounded-xl text-2xl text-center font-mono focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition uppercase" placeholder="INV..." required inputmode="text">
                         </div>
                         <div class="flex flex-col gap-3 mt-4">
-                            <button type="submit" id="submit-tx-btn" class="w-full py-5 bg-red-600 text-white rounded-xl font-bold text-2xl hover:bg-red-700 shadow-xl shadow-red-200 transition active:scale-[0.98] flex items-center justify-center gap-2">
-                                <i data-lucide="plus-circle" class="w-6 h-6"></i> ទូទាត់ / បន្ថែម
+                            <button type="submit" id="submit-tx-btn" class="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-xl hover:bg-blue-700 shadow-md transition active:scale-[0.98] flex items-center justify-center gap-2">
+                                <i data-lucide="search" class="w-5 h-5"></i> ស្វែងរក & ទូទាត់
                             </button>
                         </div>
                     </form>
@@ -697,12 +702,12 @@
             let activeFormHtml;
             if (isEditing) activeFormHtml = standardFormHtml;
             else if (isQuickWithdraw) activeFormHtml = quickWithdrawFormHtml;
-            else activeFormHtml = standardFormHtml; // For Deposit adding
+            else activeFormHtml = standardFormHtml; 
 
             const postsHtml = state.posts.length > 0 ? `
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     ${state.posts.map(post => `
-                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 hover:shadow-md transition">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition">
                             <div class="flex items-start gap-3">
                                 <div class="bg-blue-50 p-2 rounded-full text-blue-600"><i data-lucide="megaphone" class="w-5 h-5"></i></div>
                                 <div>
@@ -716,43 +721,34 @@
             ` : '';
 
             // Table HTML
-            // Note: Withdraw Reports tab has NO "Add" button
             const allowAdd = isAdmin && isDeposit; 
-            
-            // Logic to show table or form
-            // Quick Withdraw: Always Form (no table, posts visible)
-            // Withdraw Reports: Always Table (no form, no posts usually or optional)
-            // Deposit: Table + Add Button (form toggles)
-
             let bodyContent = '';
 
             if (isQuickWithdraw) {
-                // Quick Withdraw Page: Posts + Form
                 bodyContent = `
-                    <div class="max-w-6xl mx-auto">
+                    <div class="max-w-6xl mx-auto space-y-4">
                         ${postsHtml}
                         ${activeFormHtml}
                     </div>
                 `;
             } else {
-                // Deposit or Withdraw Reports Page
                 const title = isDeposit ? 'បញ្ជីវេរចូល' : 'របាយការណ៍ដកប្រាក់';
                 
                 bodyContent = `
                     <div class="max-w-6xl mx-auto">
                         ${postsHtml}
-                        <div class="flex justify-between items-center mb-6 px-1">
-                            <h2 class="text-xl md:text-2xl font-bold text-gray-800">${title}</h2>
+                        <div class="flex justify-between items-center mb-4 px-1">
+                            <h2 class="text-xl font-bold text-gray-800">${title}</h2>
                             ${allowAdd ? `
-                                <button onclick="toggleForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold shadow-md active:scale-95 transition">
-                                    <i data-lucide="${state.showForm?'list':'plus'}" class="w-5 h-5"></i> 
-                                    <span class="hidden sm:inline">${state.showForm?'បញ្ជី':'បន្ថែម'}</span>
+                                <button onclick="toggleForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-bold shadow-sm active:scale-95 transition text-sm">
+                                    <i data-lucide="${state.showForm?'list':'plus'}" class="w-4 h-4"></i> 
+                                    <span>${state.showForm?'បញ្ជី':'បន្ថែម'}</span>
                                 </button>` 
                             : ''}
                         </div>
-                        ${!allowAdd && !state.showForm && isDeposit ? '<div class="bg-blue-50 text-blue-800 p-4 rounded-lg mb-6 text-sm border border-blue-100 flex gap-2"><i data-lucide="eye" class="w-4 h-4 mt-0.5"></i> Read Only Mode</div>' : ''}
+                        ${!allowAdd && !state.showForm && isDeposit ? '<div class="bg-blue-50 text-blue-800 p-3 rounded-lg mb-4 text-sm border border-blue-100 flex gap-2"><i data-lucide="eye" class="w-4 h-4 mt-0.5"></i> Read Only Mode</div>' : ''}
                         ${state.showForm ? activeFormHtml : `
-                            <div class="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+                            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                                 <div class="overflow-x-auto">
                                     <table class="w-full text-left">
                                         <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-semibold tracking-wider">
@@ -790,7 +786,6 @@
 
             if(document.getElementById('transaction-form')) document.getElementById('transaction-form').addEventListener('submit', handleTransactionSubmit);
             
-            // Render Table Data if we are in a table view
             if (!isQuickWithdraw && !state.showForm && state.transactions.length > 0) {
                 renderTransactionTable();
             } else if (!isQuickWithdraw && !state.showForm && state.transactions.length === 0) {
@@ -811,29 +806,29 @@
                 const editValue = isEditing ? (state.editingSetting[fieldName] || state.editingSetting.code) : '';
                 
                 return `
-                <div class="bg-white p-6 rounded-lg shadow mb-6">
-                    <h3 class="font-bold text-lg mb-4 border-b pb-2">${title}</h3>
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
+                    <h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">${title}</h3>
                     <div class="flex gap-2 mb-4">
-                        <input type="text" id="new-${table}" placeholder="${placeholder}" class="flex-1 p-2 border rounded" value="${editValue}">
+                        <input type="text" id="new-${table}" placeholder="${placeholder}" class="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${editValue}">
                         ${isEditing ? 
-                            `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-blue-600 text-white px-4 rounded hover:bg-blue-700">Update</button>
-                             <button onclick="cancelEditSetting()" class="bg-gray-400 text-white px-4 rounded hover:bg-gray-500">Cancel</button>`
+                            `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700 font-medium">Update</button>
+                             <button onclick="cancelEditSetting()" class="bg-gray-100 text-gray-700 px-4 rounded-lg hover:bg-gray-200 font-medium">Cancel</button>`
                             : 
-                            `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-green-600 text-white px-4 rounded hover:bg-green-700">បន្ថែម</button>`
+                            `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-green-600 text-white px-4 rounded-lg hover:bg-green-700 font-medium">បន្ថែម</button>`
                         }
                     </div>
                     <ul class="space-y-2">
                         ${items.map(item => `
-                            <li class="flex justify-between items-center bg-gray-50 p-2 rounded group">
+                            <li class="flex justify-between items-center bg-gray-50 p-3 rounded-lg group hover:bg-gray-100 transition">
                                 <div class="flex items-center gap-3">
                                     <button onclick="setDefault('${table}', '${item.id}')" title="Set as Default">
                                         <i data-lucide="star" class="w-5 h-5 ${item.is_default ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300 hover:text-yellow-400'}"></i>
                                     </button>
-                                    <span>${item.name || item.code}</span>
+                                    <span class="font-medium text-gray-700">${item.name || item.code}</span>
                                 </div>
-                                <div class="flex gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
-                                    <button onclick="prepareEditSetting('${table}', '${item.id}')" class="text-blue-500"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                                    <button onclick="deleteSettingItem('${table}', '${item.id}')" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                <div class="flex gap-2 opacity-100 sm:opacity-50 group-hover:opacity-100 transition-opacity">
+                                    <button onclick="prepareEditSetting('${table}', '${item.id}')" class="text-blue-500 hover:bg-blue-100 p-1 rounded"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                    <button onclick="deleteSettingItem('${table}', '${item.id}')" class="text-red-500 hover:bg-red-100 p-1 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                                 </div>
                             </li>
                         `).join('')}
@@ -842,30 +837,30 @@
             };
 
             const postSection = `
-                <div class="bg-white p-6 rounded-lg shadow mb-6">
-                    <h3 class="font-bold text-lg mb-4 border-b pb-2">ព័ត៌មាន & ពាណិជ្ជកម្ម (Posts)</h3>
-                    <div class="space-y-3 mb-4 border p-4 rounded bg-gray-50">
-                        <input type="text" id="post-title" placeholder="ចំណងជើង (Title)" class="w-full p-2 border rounded" value="${state.editingSetting?.table === 'posts' ? state.editingSetting.title : ''}">
-                        <textarea id="post-content" placeholder="ខ្លឹមសារ (Content)" class="w-full p-2 border rounded" rows="2">${state.editingSetting?.table === 'posts' ? state.editingSetting.content : ''}</textarea>
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
+                    <h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">ព័ត៌មាន & ពាណិជ្ជកម្ម (Posts)</h3>
+                    <div class="space-y-3 mb-4 border p-4 rounded-lg bg-gray-50">
+                        <input type="text" id="post-title" placeholder="ចំណងជើង (Title)" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${state.editingSetting?.table === 'posts' ? state.editingSetting.title : ''}">
+                        <textarea id="post-content" placeholder="ខ្លឹមសារ (Content)" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" rows="2">${state.editingSetting?.table === 'posts' ? state.editingSetting.content : ''}</textarea>
                         <div class="flex gap-2">
                             ${state.editingSetting?.table === 'posts' ? 
-                                `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Update Post</button>
-                                 <button onclick="cancelEditSetting()" class="w-1/3 bg-gray-400 text-white py-2 rounded font-bold">Cancel</button>`
+                                `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700">Update Post</button>
+                                 <button onclick="cancelEditSetting()" class="w-1/3 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold">Cancel</button>`
                                 : 
-                                `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">បង្ហោះ Post</button>`
+                                `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700">បង្ហោះ Post</button>`
                             }
                         </div>
                     </div>
                     <div class="space-y-3">
                         ${state.posts.map(post => `
-                            <div class="bg-white border rounded p-3 flex justify-between items-start group">
+                            <div class="bg-white border rounded-lg p-3 flex justify-between items-start group hover:shadow-sm transition">
                                 <div>
-                                    <h4 class="font-bold text-sm">${post.title}</h4>
-                                    <p class="text-xs text-gray-500">${post.content || '-'}</p>
+                                    <h4 class="font-bold text-sm text-gray-800">${post.title}</h4>
+                                    <p class="text-xs text-gray-500 mt-1">${post.content || '-'}</p>
                                 </div>
-                                <div class="flex flex-col gap-2 opacity-50 group-hover:opacity-100">
-                                    <button onclick="prepareEditSetting('posts', '${post.id}')" class="text-blue-500"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                                    <button onclick="deleteSettingItem('posts', '${post.id}')" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                <div class="flex flex-col gap-2 opacity-100 sm:opacity-50 group-hover:opacity-100">
+                                    <button onclick="prepareEditSetting('posts', '${post.id}')" class="text-blue-500 hover:bg-blue-50 p-1 rounded"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                    <button onclick="deleteSettingItem('posts', '${post.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                                 </div>
                             </div>
                         `).join('')}
@@ -874,21 +869,21 @@
             `;
 
             const userSection = `
-                <div class="bg-white p-6 rounded-lg shadow mb-6">
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
                     <div class="flex justify-between items-center mb-4 border-b pb-2">
-                         <h3 class="font-bold text-lg">គ្រប់គ្រងអ្នកប្រើប្រាស់ (Users)</h3>
+                         <h3 class="font-bold text-lg text-gray-700">គ្រប់គ្រងអ្នកប្រើប្រាស់ (Users)</h3>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-sm">
-                            <thead class="bg-gray-100">
-                                <tr><th class="p-3">Email</th><th class="p-3">Role</th><th class="p-3 text-right">Actions</th></tr>
+                            <thead class="bg-gray-50">
+                                <tr><th class="p-3 text-gray-600">Email</th><th class="p-3 text-gray-600">Role</th><th class="p-3 text-right text-gray-600">Actions</th></tr>
                             </thead>
                             <tbody class="divide-y">
                                 ${state.users.map(u => `
                                     <tr>
-                                        <td class="p-3">${u.email}</td>
+                                        <td class="p-3 font-medium text-gray-700">${u.email.split('@')[0]}</td>
                                         <td class="p-3">
-                                            <select onchange="updateUserRole('${u.id}', this.value)" class="border rounded p-1 text-xs ${u.role==='admin'?'text-blue-600 font-bold':''}">
+                                            <select onchange="updateUserRole('${u.id}', this.value)" class="border rounded p-1 text-xs ${u.role==='admin'?'text-blue-600 font-bold bg-blue-50':''}">
                                                 <option value="user" ${u.role==='user'?'selected':''}>User</option>
                                                 <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
                                             </select>
@@ -905,7 +900,7 @@
 
             container.innerHTML = `
                 <div class="max-w-6xl mx-auto">
-                    <h2 class="text-2xl font-bold mb-6">ការកំណត់ (Settings)</h2>
+                    <h2 class="text-2xl font-bold mb-6 px-1">ការកំណត់ (Settings)</h2>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div>
                             ${postSection}
