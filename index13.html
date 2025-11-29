@@ -69,7 +69,7 @@
             users: [],
             editingTx: null,
             editingSetting: null,
-            filterUser: '' // NEW: For filtering reports
+            filterUser: '' 
         };
 
         // --- CUSTOM DIALOG SYSTEM ---
@@ -187,7 +187,6 @@
             if(state.role !== 'admin') return;
             const { data } = await supabase.from('profiles').select('*').order('email'); 
             state.users = data || []; 
-            // We don't render settings here, just fetching for dropdowns if needed
         }
 
         async function fetchTransactions() {
@@ -195,7 +194,11 @@
             
             const currentTab = state.activeTab;
             const tableBody = document.getElementById('transaction-table-body');
-            if(tableBody) tableBody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-gray-500">កំពុងទាញទិន្នន័យ...</td></tr>';
+            
+            // Only show loading if we are NOT on reports page to avoid UI flickering on summaries
+            if (currentTab !== 'withdraw_reports' && tableBody) {
+                tableBody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-gray-500">កំពុងទាញទិន្នន័យ...</td></tr>';
+            }
 
             const { data, error } = await supabase
                 .from('transactions')
@@ -207,7 +210,12 @@
 
             if (!error) {
                 state.transactions = data;
-                renderTransactionTable(); // This will trigger dashboard re-render for totals if needed
+                // FIX: If on Reports page, we MUST re-render the whole dashboard content to update Summary Cards
+                if (currentTab === 'withdraw_reports') {
+                    renderDashboardContent();
+                } else {
+                    renderTransactionTable();
+                }
             } else {
                 if(tableBody) tableBody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-500">មានបញ្ហា: ${error.message}</td></tr>`;
             }
@@ -279,7 +287,7 @@
 
         window.setFilterUser = (email) => {
             state.filterUser = email;
-            renderTransactionTable(); // Re-render table and totals
+            renderDashboardContent(); // Re-render to update summary and table
         }
 
         async function handleTransactionSubmit(e) {
@@ -751,7 +759,6 @@
                     </div>
                 `;
             } else {
-                // Deposit or Withdraw Reports Page
                 const title = isDeposit ? 'បញ្ជីវេរចូល' : 'របាយការណ៍ដកប្រាក់';
                 
                 // --- REPORTS SUMMARY LOGIC ---
@@ -813,9 +820,6 @@
 
                 bodyContent = `
                     <div class="max-w-6xl mx-auto">
-                        <!-- Only show posts on Deposit page if you want, usually hidden on reports -->
-                        ${isDeposit ? postsHtml : ''}
-                        
                         <div class="flex justify-between items-center mb-4 px-1">
                             <h2 class="text-xl font-bold text-gray-800">${title}</h2>
                             ${allowAdd ? `
@@ -859,7 +863,6 @@
             
             lucide.createIcons();
             
-            // Auto Focus for Quick Withdraw Input
             if(isQuickWithdraw) {
                focusInput('withdraw_invoice');
             }
@@ -877,7 +880,7 @@
             }
         }
 
-        // ... (Keep existing renderSettingsContent) ...
+        // ... (Rest of settings content and renderTransactionTable - no changes needed there) ...
         function renderSettingsContent() {
             const container = document.getElementById('main-content');
             
