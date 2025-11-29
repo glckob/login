@@ -13,8 +13,7 @@
 
     <!-- Styles -->
     <style>
-        body { font-family: 'Hanuman', sans-serif, ui-sans-serif, system-ui; background-color: #f0f2f5; } /* FB Background Color */
-        /* Mobile Optimization */
+        body { font-family: 'Hanuman', sans-serif, ui-sans-serif, system-ui; background-color: #f0f2f5; } 
         input, select, button { touch-action: manipulation; } 
         
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #1877f2; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
@@ -59,7 +58,7 @@
         const state = {
             session: null,
             role: null,
-            activeTab: 'deposit', // Will change dynamically
+            activeTab: 'deposit', 
             transactions: [],
             loading: true,
             authMode: 'login',
@@ -72,9 +71,9 @@
             editingSetting: null
         };
 
-        // --- CUSTOM DIALOG SYSTEM ---
+        // --- CUSTOM DIALOG SYSTEM (Updated for Focus Callback) ---
         const dialog = {
-            show: (title, message, isConfirm = false, onConfirm = null) => {
+            show: (title, message, isConfirm = false, onConfirm = null, onClose = null) => {
                 const modal = document.getElementById('custom-modal');
                 const titleEl = document.getElementById('modal-title');
                 const msgEl = document.getElementById('modal-message');
@@ -90,9 +89,14 @@
                 const newCancelBtn = cancelBtn.cloneNode(true);
                 cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
 
+                const handleClose = () => {
+                    modal.classList.replace('modal-visible', 'modal-hidden');
+                    if (onClose) onClose();
+                };
+
                 if (isConfirm) {
                     newCancelBtn.style.display = 'block';
-                    newCancelBtn.onclick = () => modal.classList.replace('modal-visible', 'modal-hidden');
+                    newCancelBtn.onclick = handleClose;
                     
                     newConfirmBtn.innerText = 'យល់ព្រម';
                     newConfirmBtn.className = "w-full sm:w-auto px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-bold shadow-lg shadow-red-200";
@@ -104,14 +108,14 @@
                     newCancelBtn.style.display = 'none';
                     newConfirmBtn.innerText = 'បិទ';
                     newConfirmBtn.className = "w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold shadow-lg shadow-blue-200";
-                    newConfirmBtn.onclick = () => modal.classList.replace('modal-visible', 'modal-hidden');
+                    newConfirmBtn.onclick = handleClose;
                 }
 
                 modal.classList.replace('modal-hidden', 'modal-visible');
             }
         };
-        const showAlert = (title, msg) => dialog.show(title, msg, false);
-        const showConfirm = (title, msg, callback) => dialog.show(title, msg, true, callback);
+        const showAlert = (title, msg, onClose) => dialog.show(title, msg, false, null, onClose);
+        const showConfirm = (title, msg, callback, onClose) => dialog.show(title, msg, true, callback, onClose);
 
 
         // --- INITIALIZATION ---
@@ -155,9 +159,6 @@
                 const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
                 state.role = data ? data.role : 'user';
                 
-                // --- RULE: Default Pages ---
-                // User -> Quick Withdraw
-                // Admin -> Deposit
                 if (state.role !== 'admin') {
                     state.activeTab = 'quick_withdraw';
                 } else {
@@ -264,6 +265,17 @@
             });
         };
 
+        // --- UTILS FOR FOCUS ---
+        function focusInput(id) {
+            setTimeout(() => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.focus();
+                    if(el.select) el.select();
+                }
+            }, 100);
+        }
+
         async function handleTransactionSubmit(e) {
             e.preventDefault();
             const btn = document.getElementById('submit-tx-btn');
@@ -277,7 +289,7 @@
                 const invoiceNumber = document.getElementById('withdraw_invoice').value.trim();
                 
                 if (!invoiceNumber) {
-                    showAlert('ជូនដំណឹង', 'សូមបញ្ចូលលេខវិក្កយបត្រ');
+                    showAlert('ជូនដំណឹង', 'សូមបញ្ចូលលេខវិក្កយបត្រ', () => focusInput('withdraw_invoice'));
                     btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
                     return;
                 }
@@ -291,15 +303,15 @@
                     .single();
 
                 if (searchError || !depositRecord) {
-                    showAlert('បរាជ័យ', 'រកមិនឃើញវិក្កយបត្រនេះទេ (INV: ' + invoiceNumber + ') ឬទឹកប្រាក់ត្រូវបានដករួចរាល់ហើយ។');
+                    showAlert('បរាជ័យ', 'រកមិនឃើញវិក្កយបត្រនេះទេ (INV: ' + invoiceNumber + ') ឬទឹកប្រាក់ត្រូវបានដករួចរាល់ហើយ។', () => focusInput('withdraw_invoice'));
                     btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
                     document.getElementById('withdraw_invoice').value = '';
-                    document.getElementById('withdraw_invoice').focus();
                     return;
                 }
 
                 const confirmMsg = `រកឃើញវិក្កយបត្រ: ${depositRecord.invoice_number}\nទឹកប្រាក់: $${depositRecord.amount} ${depositRecord.currency || ''}\nឈ្មោះ: ${depositRecord.account_name}\n\nតើអ្នកចង់ធ្វើការដកប្រាក់នេះមែនទេ?`;
                 
+                // Confirm Dialog with Cancel Callback to Focus
                 showConfirm('បញ្ជាក់ការដកប្រាក់', confirmMsg, async () => {
                     const { error: insertError } = await supabase.from('transactions').insert([{
                         transaction_type: 'withdraw',
@@ -313,7 +325,7 @@
                     }]);
 
                     if (insertError) {
-                        showAlert('បរាជ័យ', 'បរាជ័យក្នុងការបង្កើតទិន្នន័យដកប្រាក់: ' + insertError.message);
+                        showAlert('បរាជ័យ', 'បរាជ័យក្នុងការបង្កើតទិន្នន័យដកប្រាក់: ' + insertError.message, () => focusInput('withdraw_invoice'));
                         btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
                         return;
                     }
@@ -325,17 +337,17 @@
                         .select();
 
                     if (updateError) {
-                        showAlert('ព្រមាន', 'Error updating deposit status: ' + updateError.message);
+                        showAlert('ព្រមាន', 'Error updating deposit status: ' + updateError.message, () => focusInput('withdraw_invoice'));
                     } else if (updatedData && updatedData.length === 0) {
-                        showAlert('បញ្ហាសិទ្ធិ', 'ប្រព័ន្ធមិនអាចកែប្រែស្ថានភាពវេរចូលចាស់បានទេ។');
+                        showAlert('បញ្ហាសិទ្ធិ', 'ប្រព័ន្ធមិនអាចកែប្រែស្ថានភាពវេរចូលចាស់បានទេ។', () => focusInput('withdraw_invoice'));
                     } else {
-                        showAlert('ជោគជ័យ', 'ដកប្រាក់ជោគជ័យ!');
-                        document.getElementById('withdraw_invoice').value = ''; // Clear input
-                        document.getElementById('withdraw_invoice').focus(); // Refocus
-                        // Don't switch tab, keep them on quick withdraw
+                        showAlert('ជោគជ័យ', 'ដកប្រាក់ជោគជ័យ!', () => focusInput('withdraw_invoice'));
+                        document.getElementById('withdraw_invoice').value = '';
+                        // Don't switch tab
                     }
-                });
-                btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
+                    btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
+                }, () => focusInput('withdraw_invoice')); // On Cancel/Close of Confirm
+                
                 return;
             }
 
@@ -349,7 +361,7 @@
             const currency = document.getElementById('currency_select').value;
 
             if (!invoiceNumber) {
-                showAlert('ជូនដំណឹង', 'សូមបញ្ចូលលេខវិក្កយបត្រ');
+                showAlert('ជូនដំណឹង', 'សូមបញ្ចូលលេខវិក្កយបត្រ', () => focusInput('invoice_number'));
                 btn.disabled = false; btn.innerText = isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក';
                 return;
             }
@@ -364,7 +376,7 @@
 
                 if (existing) {
                     if (!isEditing || existing.id !== state.editingTx.id) {
-                        showAlert('បរាជ័យ', 'លេខវិក្កយបត្រនេះមាននៅក្នុងប្រព័ន្ធរួចហើយ!');
+                        showAlert('បរាជ័យ', 'លេខវិក្កយបត្រនេះមាននៅក្នុងប្រព័ន្ធរួចហើយ!', () => focusInput('invoice_number'));
                         btn.disabled = false; btn.innerText = isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក';
                         return;
                     }
@@ -381,23 +393,30 @@
             };
 
             if (!isEditing) {
+                // INSERT (Deposit)
                 formData.transaction_type = 'deposit'; 
                 formData.user_email = state.session.user.email;
                 
                 const { error } = await supabase.from('transactions').insert([formData]);
-                if (error) showAlert('បរាជ័យ', error.message);
-                else {
-                    showAlert('ជោគជ័យ', 'រក្សាទុកជោគជ័យ!');
-                    state.showForm = false;
+                if (error) {
+                    showAlert('បរាជ័យ', error.message, () => focusInput('invoice_number'));
+                } else {
+                    showAlert('ជោគជ័យ', 'រក្សាទុកជោគជ័យ!', () => focusInput('invoice_number'));
+                    // Rapid Entry Mode: Clear inputs but keep form open
+                    document.getElementById('invoice_number').value = '';
+                    document.getElementById('amount').value = '';
+                    document.getElementById('account_name').value = '';
+                    // Keep bank/currency selected
                     fetchTransactions();
                 }
             } else {
+                // UPDATE (Edit)
                 const { error } = await supabase.from('transactions').update(formData).eq('id', state.editingTx.id);
-                if (error) showAlert('បរាជ័យ', 'កែប្រែមិនបានសម្រេច: ' + error.message);
+                if (error) showAlert('បរាជ័យ', 'កែប្រែមិនបានសម្រេច: ' + error.message, () => focusInput('invoice_number'));
                 else {
                     showAlert('ជោគជ័យ', 'កែប្រែទិន្នន័យជោគជ័យ!');
                     state.editingTx = null;
-                    state.showForm = false;
+                    state.showForm = false; // Close form on edit success
                     fetchTransactions();
                 }
             }
@@ -778,10 +797,7 @@
             
             // Auto Focus for Quick Withdraw Input
             if(isQuickWithdraw) {
-               setTimeout(() => {
-                   const input = document.getElementById('withdraw_invoice');
-                   if(input) input.focus();
-               }, 100);
+               focusInput('withdraw_invoice');
             }
 
             if(document.getElementById('transaction-form')) document.getElementById('transaction-form').addEventListener('submit', handleTransactionSubmit);
