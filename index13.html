@@ -15,7 +15,7 @@
     <style>
         body { font-family: 'Hanuman', sans-serif, ui-sans-serif, system-ui; background-color: #f3f4f6; }
         /* Mobile Optimization */
-        input, select, button { touch-action: manipulation; } /* Prevent double-tap zoom */
+        input, select, button { touch-action: manipulation; } 
         
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #2563eb; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -25,7 +25,6 @@
         .inactive-nav { color: #cbd5e1; }
         .inactive-nav:hover { background-color: #1e293b; color: white; }
         
-        /* Better Focus States for Mobile */
         input:focus, select:focus, textarea:focus { border-color: #2563eb; outline: none; ring: 2px; --tw-ring-color: #93c5fd; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
         
         /* Modal Styles */
@@ -63,7 +62,7 @@
         const state = {
             session: null,
             role: null,
-            activeTab: 'deposit', 
+            activeTab: 'deposit', // Will change dynamically
             transactions: [],
             loading: true,
             authMode: 'login',
@@ -159,8 +158,11 @@
                 const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
                 state.role = data ? data.role : 'user';
                 
+                // --- RULE: Default Pages ---
+                // User -> Quick Withdraw
+                // Admin -> Deposit
                 if (state.role !== 'admin') {
-                    state.activeTab = 'withdraw';
+                    state.activeTab = 'quick_withdraw';
                 } else {
                     state.activeTab = 'deposit'; 
                 }
@@ -168,7 +170,7 @@
             } catch (error) {
                 console.error('Error fetching role:', error);
                 state.role = 'user';
-                state.activeTab = 'withdraw';
+                state.activeTab = 'quick_withdraw';
             } finally {
                 await Promise.all([fetchBanks(), fetchPosts(), fetchCurrencies()]);
                 state.loading = false;
@@ -190,7 +192,7 @@
         }
 
         async function fetchTransactions() {
-            if (state.activeTab === 'settings') return;
+            if (state.activeTab === 'settings' || state.activeTab === 'quick_withdraw') return;
             
             const currentTab = state.activeTab;
             const tableBody = document.getElementById('transaction-table-body');
@@ -199,7 +201,7 @@
             const { data, error } = await supabase
                 .from('transactions')
                 .select('*')
-                .eq('transaction_type', currentTab)
+                .eq('transaction_type', currentTab === 'withdraw_reports' ? 'withdraw' : currentTab)
                 .order('created_at', { ascending: false });
 
             if (state.activeTab !== currentTab) return;
@@ -271,10 +273,10 @@
             btn.disabled = true; btn.innerText = 'កំពុងដំណើរការ...';
 
             const isEditing = !!state.editingTx;
-            const isWithdrawTab = state.activeTab === 'withdraw';
+            const isQuickWithdraw = state.activeTab === 'quick_withdraw';
 
-            // --- A. WITHDRAW SEARCH (Create Only) ---
-            if (isWithdrawTab && !isEditing) {
+            // --- A. QUICK WITHDRAW (Create Only) ---
+            if (isQuickWithdraw && !isEditing) {
                 const invoiceNumber = document.getElementById('withdraw_invoice').value.trim();
                 
                 if (!invoiceNumber) {
@@ -294,6 +296,8 @@
                 if (searchError || !depositRecord) {
                     showAlert('បរាជ័យ', 'រកមិនឃើញវិក្កយបត្រនេះទេ (INV: ' + invoiceNumber + ') ឬទឹកប្រាក់ត្រូវបានដករួចរាល់ហើយ។');
                     btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
+                    document.getElementById('withdraw_invoice').value = '';
+                    document.getElementById('withdraw_invoice').focus();
                     return;
                 }
 
@@ -329,8 +333,9 @@
                         showAlert('បញ្ហាសិទ្ធិ', 'ប្រព័ន្ធមិនអាចកែប្រែស្ថានភាពវេរចូលចាស់បានទេ។');
                     } else {
                         showAlert('ជោគជ័យ', 'ដកប្រាក់ជោគជ័យ!');
-                        state.showForm = false;
-                        fetchTransactions();
+                        document.getElementById('withdraw_invoice').value = ''; // Clear input
+                        document.getElementById('withdraw_invoice').focus(); // Refocus
+                        // Don't switch tab, keep them on quick withdraw
                     }
                 });
                 btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
@@ -551,13 +556,17 @@
                             <p class="text-xs text-slate-400 mt-2">${state.session.user.email} (${state.role})</p>
                         </div>
                         <nav class="flex-1 p-4 space-y-2">
+                            <button onclick="switchTab('quick_withdraw')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'quick_withdraw' ? 'active-nav' : 'inactive-nav'}">
+                                <i data-lucide="zap"></i> ដកប្រាក់រហ័ស
+                            </button>
+
                             ${isAdmin ? `
                             <button onclick="switchTab('deposit')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'deposit' ? 'active-nav' : 'inactive-nav'}">
                                 <i data-lucide="arrow-down-circle"></i> វេរចូល (Deposit)
                             </button>` : ''}
                             
-                            <button onclick="switchTab('withdraw')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'withdraw' ? 'active-nav' : 'inactive-nav'}">
-                                <i data-lucide="arrow-up-circle"></i> ដកប្រាក់ (Withdraw)
+                            <button onclick="switchTab('withdraw_reports')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'withdraw_reports' ? 'active-nav' : 'inactive-nav'}">
+                                <i data-lucide="file-text"></i> របាយការណ៍ដកប្រាក់
                             </button>
                             
                             ${isAdmin ? `
@@ -573,10 +582,11 @@
                             <h2 class="font-bold text-lg">MoneyTransfer</h2>
                             <button onclick="handleLogout()"><i data-lucide="log-out"></i></button>
                         </div>
-                         <div class="md:hidden bg-slate-800 text-white flex justify-around p-2 text-sm shadow-md z-10">
-                            ${isAdmin ? `<button onclick="switchTab('deposit')" class="p-2 flex-1 text-center ${state.activeTab==='deposit'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">វេរចូល</button>` : ''}
-                            <button onclick="switchTab('withdraw')" class="p-2 flex-1 text-center ${state.activeTab==='withdraw'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">ដកប្រាក់</button>
-                            ${isAdmin ? `<button onclick="switchTab('settings')" class="p-2 flex-1 text-center ${state.activeTab==='settings'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">កំណត់</button>`:''}
+                         <div class="md:hidden bg-slate-800 text-white flex justify-around p-2 text-sm shadow-md z-10 overflow-x-auto whitespace-nowrap">
+                            <button onclick="switchTab('quick_withdraw')" class="p-2 px-4 ${state.activeTab==='quick_withdraw'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">ដកប្រាក់រហ័ស</button>
+                            ${isAdmin ? `<button onclick="switchTab('deposit')" class="p-2 px-4 ${state.activeTab==='deposit'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">វេរចូល</button>` : ''}
+                            <button onclick="switchTab('withdraw_reports')" class="p-2 px-4 ${state.activeTab==='withdraw_reports'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">របាយការណ៍</button>
+                            ${isAdmin ? `<button onclick="switchTab('settings')" class="p-2 px-4 ${state.activeTab==='settings'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">កំណត់</button>`:''}
                          </div>
                         <main id="main-content" class="flex-1 overflow-auto p-4 md:p-6 bg-gray-50 pb-20"></main>
                     </div>
@@ -593,13 +603,14 @@
             }
 
             const isDeposit = state.activeTab === 'deposit';
-            const isWithdraw = state.activeTab === 'withdraw';
+            const isWithdrawReports = state.activeTab === 'withdraw_reports';
+            const isQuickWithdraw = state.activeTab === 'quick_withdraw';
             const isAdmin = state.role === 'admin';
             
             const isEditing = !!state.editingTx;
             const editData = state.editingTx || {};
 
-            // 1. STANDARD FORM (MOBILE OPTIMIZED)
+            // 1. STANDARD FORM (Only for Deposit or Edit)
             const standardFormHtml = `
                 <div class="bg-white p-4 md:p-8 rounded-xl shadow-xl border border-gray-100 max-w-3xl mx-auto">
                     <h3 class="text-2xl font-bold mb-6 flex gap-2 items-center text-blue-800 border-b pb-4">
@@ -664,32 +675,29 @@
                     </form>
                 </div>`;
 
-            // 2. WITHDRAW SEARCH FORM (MOBILE OPTIMIZED)
-            const withdrawFormHtml = `
-                <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl border border-red-50 max-w-xl mx-auto">
+            // 2. QUICK WITHDRAW FORM
+            const quickWithdrawFormHtml = `
+                <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl border border-red-50 max-w-xl mx-auto mt-6">
                     <h3 class="text-2xl font-bold mb-6 flex gap-2 items-center text-red-600 border-b border-red-100 pb-4">
-                        <i data-lucide="minus-circle" class="w-7 h-7"></i> ធ្វើការដកប្រាក់
+                        <i data-lucide="zap" class="w-7 h-7 fill-red-100"></i> ដកប្រាក់រហ័ស
                     </h3>
-                    <div class="bg-yellow-50 text-yellow-800 p-4 rounded-lg mb-6 text-sm border border-yellow-200 flex gap-2 items-start">
-                        <i data-lucide="info" class="w-5 h-5 shrink-0 mt-0.5"></i>
-                        <span>សូមបញ្ចូលលេខវិក្កយបត្រដើម្បីស្វែងរកទិន្នន័យវេរចូល និងធ្វើការទូទាត់។</span>
-                    </div>
                     <form id="transaction-form" class="flex flex-col gap-6">
                         <div class="flex flex-col gap-2">
-                            <label class="text-sm font-bold text-gray-700">លេខវិក្កយបត្រ (Invoice Number)</label>
-                            <input type="text" id="withdraw_invoice" class="w-full p-5 border-2 border-gray-200 rounded-xl text-xl text-center font-mono focus:border-red-500 focus:ring-4 focus:ring-red-100 outline-none transition" placeholder="INV-001" required inputmode="text">
+                            <label class="text-lg font-bold text-gray-700 text-center">បញ្ចូលលេខវិក្កយបត្រ (Invoice)</label>
+                            <input type="text" id="withdraw_invoice" class="w-full p-6 border-2 border-gray-300 rounded-2xl text-3xl text-center font-mono focus:border-red-500 focus:ring-4 focus:ring-red-100 outline-none transition uppercase" placeholder="INV..." required inputmode="text">
                         </div>
-                        <div class="flex flex-col gap-3 mt-2">
-                            <button type="submit" id="submit-tx-btn" class="w-full py-4 bg-red-600 text-white rounded-xl font-bold text-xl hover:bg-red-700 shadow-lg shadow-red-200 transition active:scale-[0.98]">ទូទាត់ដកប្រាក់</button>
-                            <button type="button" onclick="toggleForm()" class="w-full py-4 bg-white border border-gray-200 text-gray-600 rounded-xl font-medium text-lg hover:bg-gray-50 transition">បោះបង់</button>
+                        <div class="flex flex-col gap-3 mt-4">
+                            <button type="submit" id="submit-tx-btn" class="w-full py-5 bg-red-600 text-white rounded-xl font-bold text-2xl hover:bg-red-700 shadow-xl shadow-red-200 transition active:scale-[0.98] flex items-center justify-center gap-2">
+                                <i data-lucide="plus-circle" class="w-6 h-6"></i> ទូទាត់ / បន្ថែម
+                            </button>
                         </div>
                     </form>
                 </div>`;
 
             let activeFormHtml;
             if (isEditing) activeFormHtml = standardFormHtml;
-            else if (isWithdraw) activeFormHtml = withdrawFormHtml;
-            else activeFormHtml = standardFormHtml;
+            else if (isQuickWithdraw) activeFormHtml = quickWithdrawFormHtml;
+            else activeFormHtml = standardFormHtml; // For Deposit adding
 
             const postsHtml = state.posts.length > 0 ? `
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -708,48 +716,90 @@
             ` : '';
 
             // Table HTML
-            const allowAdd = isAdmin || isWithdraw;
-            const tableHtml = `
-                <div class="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left">
-                            <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-semibold tracking-wider">
-                                <tr>
-                                    <th class="p-4 whitespace-nowrap">កាលបរិច្ឆេទ</th>
-                                    <th class="p-4 whitespace-nowrap">Invoice</th>
-                                    <th class="p-4 whitespace-nowrap text-right">ទឹកប្រាក់</th>
-                                    <th class="p-4 whitespace-nowrap">ឈ្មោះ</th>
-                                    <th class="p-4 whitespace-nowrap">ធនាគារ</th>
-                                    ${isDeposit ? '<th class="p-4 text-center whitespace-nowrap">ស្ថានភាព</th>' : ''}
-                                    <th class="p-4 whitespace-nowrap">User</th>
-                                    ${isAdmin ? '<th class="p-4 text-right whitespace-nowrap">សកម្មភាព</th>' : ''}
-                                </tr>
-                            </thead>
-                            <tbody id="transaction-table-body" class="text-sm divide-y divide-gray-100"></tbody>
-                        </table>
-                    </div>
-                </div>`;
+            // Note: Withdraw Reports tab has NO "Add" button
+            const allowAdd = isAdmin && isDeposit; 
+            
+            // Logic to show table or form
+            // Quick Withdraw: Always Form (no table, posts visible)
+            // Withdraw Reports: Always Table (no form, no posts usually or optional)
+            // Deposit: Table + Add Button (form toggles)
 
-            container.innerHTML = `
-                <div class="max-w-6xl mx-auto">
-                    ${postsHtml}
-                    <div class="flex justify-between items-center mb-6 px-1">
-                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">${isDeposit ? 'បញ្ជីវេរចូល' : 'បញ្ជីដកប្រាក់'}</h2>
-                        ${allowAdd ? `
-                            <button onclick="toggleForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold shadow-md active:scale-95 transition">
-                                <i data-lucide="${state.showForm?'list':'plus'}" class="w-5 h-5"></i> 
-                                <span class="hidden sm:inline">${state.showForm?'បញ្ជី':'បន្ថែម'}</span>
-                                <span class="sm:hidden">${state.showForm?'បញ្ជី':'បន្ថែម'}</span>
-                            </button>` 
-                        : ''}
+            let bodyContent = '';
+
+            if (isQuickWithdraw) {
+                // Quick Withdraw Page: Posts + Form
+                bodyContent = `
+                    <div class="max-w-6xl mx-auto">
+                        ${postsHtml}
+                        ${activeFormHtml}
                     </div>
-                    ${!allowAdd && !state.showForm ? '<div class="bg-blue-50 text-blue-800 p-4 rounded-lg mb-6 text-sm border border-blue-100 flex gap-2"><i data-lucide="eye" class="w-4 h-4 mt-0.5"></i> Read Only Mode</div>' : ''}
-                    ${state.showForm ? activeFormHtml : tableHtml}
-                </div>`;
+                `;
+            } else {
+                // Deposit or Withdraw Reports Page
+                const title = isDeposit ? 'បញ្ជីវេរចូល' : 'របាយការណ៍ដកប្រាក់';
+                
+                bodyContent = `
+                    <div class="max-w-6xl mx-auto">
+                        ${postsHtml}
+                        <div class="flex justify-between items-center mb-6 px-1">
+                            <h2 class="text-xl md:text-2xl font-bold text-gray-800">${title}</h2>
+                            ${allowAdd ? `
+                                <button onclick="toggleForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold shadow-md active:scale-95 transition">
+                                    <i data-lucide="${state.showForm?'list':'plus'}" class="w-5 h-5"></i> 
+                                    <span class="hidden sm:inline">${state.showForm?'បញ្ជី':'បន្ថែម'}</span>
+                                </button>` 
+                            : ''}
+                        </div>
+                        ${!allowAdd && !state.showForm && isDeposit ? '<div class="bg-blue-50 text-blue-800 p-4 rounded-lg mb-6 text-sm border border-blue-100 flex gap-2"><i data-lucide="eye" class="w-4 h-4 mt-0.5"></i> Read Only Mode</div>' : ''}
+                        ${state.showForm ? activeFormHtml : `
+                            <div class="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left">
+                                        <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-semibold tracking-wider">
+                                            <tr>
+                                                <th class="p-4 whitespace-nowrap">កាលបរិច្ឆេទ</th>
+                                                <th class="p-4 whitespace-nowrap">Invoice</th>
+                                                <th class="p-4 whitespace-nowrap text-right">ទឹកប្រាក់</th>
+                                                <th class="p-4 whitespace-nowrap">ឈ្មោះ</th>
+                                                <th class="p-4 whitespace-nowrap">ធនាគារ</th>
+                                                ${isDeposit ? '<th class="p-4 text-center whitespace-nowrap">ស្ថានភាព</th>' : ''}
+                                                <th class="p-4 whitespace-nowrap">User</th>
+                                                ${isAdmin ? '<th class="p-4 text-right whitespace-nowrap">សកម្មភាព</th>' : ''}
+                                            </tr>
+                                        </thead>
+                                        <tbody id="transaction-table-body" class="text-sm divide-y divide-gray-100"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        `}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = bodyContent;
             
             lucide.createIcons();
+            
+            // Auto Focus for Quick Withdraw Input
+            if(isQuickWithdraw) {
+               setTimeout(() => {
+                   const input = document.getElementById('withdraw_invoice');
+                   if(input) input.focus();
+               }, 100);
+            }
+
             if(document.getElementById('transaction-form')) document.getElementById('transaction-form').addEventListener('submit', handleTransactionSubmit);
-            else if(state.transactions.length > 0) renderTransactionTable();
+            
+            // Render Table Data if we are in a table view
+            if (!isQuickWithdraw && !state.showForm && state.transactions.length > 0) {
+                renderTransactionTable();
+            } else if (!isQuickWithdraw && !state.showForm && state.transactions.length === 0) {
+                 const tbody = document.getElementById('transaction-table-body');
+                 if(tbody) {
+                     tbody.innerHTML = '<tr><td colspan="8" class="p-12 text-center text-gray-400 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-12 h-12 opacity-50"></i><span>គ្មានទិន្នន័យ</span></td></tr>'; 
+                     lucide.createIcons();
+                 }
+            }
         }
 
         // ... (Keep existing renderSettingsContent and renderTransactionTable logic) ...
