@@ -72,7 +72,8 @@
             users: [],
             editingTx: null,
             editingSetting: null,
-            filterUser: '' 
+            filterUser: '',
+            filterMonth: new Date().toISOString().slice(0, 7) // Default to current month (YYYY-MM)
         };
 
         // --- CUSTOM DIALOG SYSTEM ---
@@ -288,6 +289,11 @@
         window.setFilterUser = (email) => {
             state.filterUser = email;
             renderDashboardContent();
+        }
+
+        window.setFilterMonth = (month) => {
+            state.filterMonth = month;
+            renderDashboardContent(); // Re-render to update summary and table
         }
 
         async function handleTransactionSubmit(e) {
@@ -531,6 +537,9 @@
             state.showForm = false;
             state.editingTx = null; 
             state.filterUser = ''; 
+            // Reset filter month only if not in reports to allow persistence within tab
+            // but let's keep it consistent for now. 
+            // state.filterMonth = ... (Keep existing selection)
             renderDashboard();
             if(tab === 'settings') fetchUsers(); 
             else fetchTransactions();
@@ -774,8 +783,15 @@
                 if (isWithdrawReports) {
                     // Filter logic for summary
                     let reportData = state.transactions;
+                    
+                    // Filter by User (Admin only)
                     if (isAdmin && state.filterUser) {
-                        reportData = state.transactions.filter(t => t.user_email === state.filterUser);
+                        reportData = reportData.filter(t => t.user_email === state.filterUser);
+                    }
+                    
+                    // Filter by Month
+                    if (state.filterMonth) {
+                        reportData = reportData.filter(t => t.created_at.startsWith(state.filterMonth));
                     }
                     
                     const totalCount = reportData.length;
@@ -794,18 +810,19 @@
                     if (isAdmin) {
                         const uniqueUsers = [...new Set(state.transactions.map(t => t.user_email))];
                         filterHtml = `
-                            <div class="mb-4">
-                                <select onchange="setFilterUser(this.value)" class="w-full sm:w-auto p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm">
-                                    <option value="">បង្ហាញទិន្នន័យសរុប (All Users)</option>
-                                    ${uniqueUsers.map(email => `<option value="${email}" ${state.filterUser === email ? 'selected' : ''}>${email}</option>`).join('')}
-                                </select>
-                            </div>
+                            <select onchange="setFilterUser(this.value)" class="w-full sm:w-auto p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                                <option value="">បង្ហាញទិន្នន័យសរុប (All Users)</option>
+                                ${uniqueUsers.map(email => `<option value="${email}" ${state.filterUser === email ? 'selected' : ''}>${email}</option>`).join('')}
+                            </select>
                         `;
                     }
 
                     summaryHtml = `
                         <div class="mb-6 space-y-4">
-                            ${filterHtml}
+                            <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                                ${filterHtml}
+                                <input type="month" onchange="setFilterMonth(this.value)" value="${state.filterMonth}" class="w-full sm:w-auto p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                            </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
                                     <span class="text-gray-500 text-xs uppercase font-bold tracking-wider">ចំនួនវិក្កយបត្រ</span>
@@ -884,131 +901,23 @@
             }
         }
 
-        function renderSettingsContent() {
-            const container = document.getElementById('main-content');
-            
-            const renderConfigSection = (title, items, table, placeholder, fieldName = 'name') => {
-                const isEditing = state.editingSetting && state.editingSetting.table === table;
-                const editValue = isEditing ? (state.editingSetting[fieldName] || state.editingSetting.code) : '';
-                
-                return `
-                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-                    <h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">${title}</h3>
-                    <div class="flex gap-2 mb-4">
-                        <input type="text" id="new-${table}" placeholder="${placeholder}" class="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${editValue}">
-                        ${isEditing ? 
-                            `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700 font-medium">Update</button>
-                             <button onclick="cancelEditSetting()" class="bg-gray-100 text-gray-700 px-4 rounded-lg hover:bg-gray-200 font-medium">Cancel</button>`
-                            : 
-                            `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-green-600 text-white px-4 rounded-lg hover:bg-green-700 font-medium">បន្ថែម</button>`
-                        }
-                    </div>
-                    <ul class="space-y-2">
-                        ${items.map(item => `
-                            <li class="flex justify-between items-center bg-gray-50 p-3 rounded-lg group hover:bg-gray-100 transition">
-                                <div class="flex items-center gap-3">
-                                    <button onclick="setDefault('${table}', '${item.id}')" title="Set as Default">
-                                        <i data-lucide="star" class="w-5 h-5 ${item.is_default ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300 hover:text-yellow-400'}"></i>
-                                    </button>
-                                    <span class="font-medium text-gray-700">${item.name || item.code}</span>
-                                </div>
-                                <div class="flex gap-2 opacity-100 sm:opacity-50 group-hover:opacity-100 transition-opacity">
-                                    <button onclick="prepareEditSetting('${table}', '${item.id}')" class="text-blue-500 hover:bg-blue-100 p-1 rounded"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                                    <button onclick="deleteSettingItem('${table}', '${item.id}')" class="text-red-500 hover:bg-red-100 p-1 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                                </div>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>`;
-            };
-
-            const postSection = `
-                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-                    <h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">ព័ត៌មាន & ពាណិជ្ជកម្ម (Posts)</h3>
-                    <div class="space-y-3 mb-4 border p-4 rounded-lg bg-gray-50">
-                        <input type="text" id="post-title" placeholder="ចំណងជើង (Title)" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${state.editingSetting?.table === 'posts' ? state.editingSetting.title : ''}">
-                        <textarea id="post-content" placeholder="ខ្លឹមសារ (Content)" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" rows="2">${state.editingSetting?.table === 'posts' ? state.editingSetting.content : ''}</textarea>
-                        <div class="flex gap-2">
-                            ${state.editingSetting?.table === 'posts' ? 
-                                `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700">Update Post</button>
-                                 <button onclick="cancelEditSetting()" class="w-1/3 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold">Cancel</button>`
-                                : 
-                                `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700">បង្ហោះ Post</button>`
-                            }
-                        </div>
-                    </div>
-                    <div class="space-y-3">
-                        ${state.posts.map(post => `
-                            <div class="bg-white border rounded-lg p-3 flex justify-between items-start group hover:shadow-sm transition">
-                                <div>
-                                    <h4 class="font-bold text-sm text-gray-800">${post.title}</h4>
-                                    <p class="text-xs text-gray-500 mt-1">${post.content || '-'}</p>
-                                </div>
-                                <div class="flex flex-col gap-2 opacity-100 sm:opacity-50 group-hover:opacity-100">
-                                    <button onclick="prepareEditSetting('posts', '${post.id}')" class="text-blue-500 hover:bg-blue-50 p-1 rounded"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                                    <button onclick="deleteSettingItem('posts', '${post.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-
-            const userSection = `
-                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-                    <div class="flex justify-between items-center mb-4 border-b pb-2">
-                         <h3 class="font-bold text-lg text-gray-700">គ្រប់គ្រងអ្នកប្រើប្រាស់ (Users)</h3>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead class="bg-gray-50">
-                                <tr><th class="p-3 text-gray-600">Email</th><th class="p-3 text-gray-600">Role</th><th class="p-3 text-right text-gray-600">Actions</th></tr>
-                            </thead>
-                            <tbody class="divide-y">
-                                ${state.users.map(u => `
-                                    <tr>
-                                        <td class="p-3 font-medium text-gray-700">${u.email.split('@')[0]}</td>
-                                        <td class="p-3">
-                                            <select onchange="updateUserRole('${u.id}', this.value)" class="border rounded p-1 text-xs ${u.role==='admin'?'text-blue-600 font-bold bg-blue-50':''}">
-                                                <option value="user" ${u.role==='user'?'selected':''}>User</option>
-                                                <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
-                                            </select>
-                                        </td>
-                                        <td class="p-3 text-right">
-                                            <button onclick="deleteUser('${u.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded"><i data-lucide="trash" class="w-4 h-4"></i></button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>`;
-
-            container.innerHTML = `
-                <div class="max-w-6xl mx-auto">
-                    <h2 class="text-2xl font-bold mb-6 px-1">ការកំណត់ (Settings)</h2>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div>
-                            ${postSection}
-                            ${renderConfigSection('ធនាគារ (Banks)', state.banks, 'banks', 'ឈ្មោះធនាគារ')}
-                            ${renderConfigSection('រូបិយប័ណ្ណ (Currencies)', state.currencies, 'currencies', 'Code (e.g. THB)', 'code')}
-                        </div>
-                        <div>
-                            ${userSection}
-                        </div>
-                    </div>
-                </div>`;
-            lucide.createIcons();
-        }
-
         function renderTransactionTable() {
             const tbody = document.getElementById('transaction-table-body');
             if(!tbody) return;
             
             // FILTER FOR TABLE VIEW
             let displayData = state.transactions;
-            if (state.activeTab === 'withdraw_reports' && state.role === 'admin' && state.filterUser) {
-                displayData = state.transactions.filter(t => t.user_email === state.filterUser);
+            
+            if (state.activeTab === 'withdraw_reports') {
+                // Apply User Filter (Admin)
+                if (state.role === 'admin' && state.filterUser) {
+                    displayData = displayData.filter(t => t.user_email === state.filterUser);
+                }
+                
+                // Apply Month Filter
+                if (state.filterMonth) {
+                    displayData = displayData.filter(t => t.created_at.startsWith(state.filterMonth));
+                }
             }
 
             if(displayData.length === 0) { 
