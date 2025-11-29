@@ -68,10 +68,11 @@
             posts: [],
             users: [],
             editingTx: null,
-            editingSetting: null
+            editingSetting: null,
+            filterUser: '' // NEW: For filtering reports
         };
 
-        // --- CUSTOM DIALOG SYSTEM (Updated for Focus Callback) ---
+        // --- CUSTOM DIALOG SYSTEM ---
         const dialog = {
             show: (title, message, isConfirm = false, onConfirm = null, onClose = null) => {
                 const modal = document.getElementById('custom-modal');
@@ -186,7 +187,7 @@
             if(state.role !== 'admin') return;
             const { data } = await supabase.from('profiles').select('*').order('email'); 
             state.users = data || []; 
-            renderSettingsContent();
+            // We don't render settings here, just fetching for dropdowns if needed
         }
 
         async function fetchTransactions() {
@@ -206,7 +207,7 @@
 
             if (!error) {
                 state.transactions = data;
-                renderTransactionTable();
+                renderTransactionTable(); // This will trigger dashboard re-render for totals if needed
             } else {
                 if(tableBody) tableBody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-500">មានបញ្ហា: ${error.message}</td></tr>`;
             }
@@ -265,7 +266,7 @@
             });
         };
 
-        // --- UTILS FOR FOCUS ---
+        // --- UTILS ---
         function focusInput(id) {
             setTimeout(() => {
                 const el = document.getElementById(id);
@@ -274,6 +275,11 @@
                     if(el.select) el.select();
                 }
             }, 100);
+        }
+
+        window.setFilterUser = (email) => {
+            state.filterUser = email;
+            renderTransactionTable(); // Re-render table and totals
         }
 
         async function handleTransactionSubmit(e) {
@@ -311,7 +317,6 @@
 
                 const confirmMsg = `រកឃើញវិក្កយបត្រ: ${depositRecord.invoice_number}\nទឹកប្រាក់: $${depositRecord.amount} ${depositRecord.currency || ''}\nឈ្មោះ: ${depositRecord.account_name}\n\nតើអ្នកចង់ធ្វើការដកប្រាក់នេះមែនទេ?`;
                 
-                // Confirm Dialog with Cancel Callback to Focus
                 showConfirm('បញ្ជាក់ការដកប្រាក់', confirmMsg, async () => {
                     const { error: insertError } = await supabase.from('transactions').insert([{
                         transaction_type: 'withdraw',
@@ -343,15 +348,14 @@
                     } else {
                         showAlert('ជោគជ័យ', 'ដកប្រាក់ជោគជ័យ!', () => focusInput('withdraw_invoice'));
                         document.getElementById('withdraw_invoice').value = '';
-                        // Don't switch tab
                     }
                     btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
-                }, () => focusInput('withdraw_invoice')); // On Cancel/Close of Confirm
+                }, () => focusInput('withdraw_invoice')); 
                 
                 return;
             }
 
-            // --- B. STANDARD FORM (Insert or Update) ---
+            // --- B. STANDARD FORM ---
             const invoiceNumber = document.getElementById('invoice_number').value.trim();
             const amount = parseFloat(document.getElementById('amount').value);
             const accountName = document.getElementById('account_name').value;
@@ -393,7 +397,6 @@
             };
 
             if (!isEditing) {
-                // INSERT (Deposit)
                 formData.transaction_type = 'deposit'; 
                 formData.user_email = state.session.user.email;
                 
@@ -401,22 +404,19 @@
                 if (error) {
                     showAlert('បរាជ័យ', error.message, () => focusInput('invoice_number'));
                 } else {
-                    showAlert('ជោគជ័យ', 'រក្សាទុកជោគជ័យ!', () => focusInput('invoice_number'));
-                    // Rapid Entry Mode: Clear inputs but keep form open
-                    document.getElementById('invoice_number').value = '';
-                    document.getElementById('amount').value = '';
-                    document.getElementById('account_name').value = '';
-                    // Keep bank/currency selected
+                    state.showForm = false;
+                    renderDashboardContent();
                     fetchTransactions();
+                    showAlert('ជោគជ័យ', 'រក្សាទុកជោគជ័យ!');
                 }
             } else {
-                // UPDATE (Edit)
                 const { error } = await supabase.from('transactions').update(formData).eq('id', state.editingTx.id);
                 if (error) showAlert('បរាជ័យ', 'កែប្រែមិនបានសម្រេច: ' + error.message, () => focusInput('invoice_number'));
                 else {
                     showAlert('ជោគជ័យ', 'កែប្រែទិន្នន័យជោគជ័យ!');
                     state.editingTx = null;
-                    state.showForm = false; // Close form on edit success
+                    state.showForm = false;
+                    renderDashboardContent();
                     fetchTransactions();
                 }
             }
@@ -527,6 +527,7 @@
             state.activeTab = tab;
             state.showForm = false;
             state.editingTx = null; 
+            state.filterUser = ''; // Reset filter on tab change
             renderDashboard();
             if(tab === 'settings') fetchUsers(); 
             else fetchTransactions();
@@ -536,6 +537,13 @@
             state.showForm = !state.showForm; 
             if(!state.showForm) state.editingTx = null;
             renderDashboardContent(); 
+            
+            if(state.showForm) {
+                setTimeout(() => {
+                    const input = document.getElementById('invoice_number');
+                    if(input) input.focus();
+                }, 100);
+            }
         }
         function toggleAuthMode() { state.authMode = state.authMode === 'login' ? 'signup' : 'login'; renderAuth(); }
 
@@ -568,7 +576,6 @@
                 <div class="flex flex-col h-screen bg-gray-100 font-sans">
                     <!-- Top Header Area (Fixed) -->
                     <div class="bg-white shadow-sm z-50 sticky top-0">
-                        <!-- Row 1: Logo & Actions -->
                         <div class="flex justify-between items-center px-4 py-3 border-b border-gray-100">
                             <h1 class="text-2xl font-black text-blue-600 tracking-tight">MoneyTransfer</h1>
                             <div class="flex items-center gap-3">
@@ -582,28 +589,24 @@
                             </div>
                         </div>
 
-                        <!-- Row 2: Navigation Tabs (Facebook Style) -->
+                        <!-- Navigation Tabs -->
                         <div class="flex justify-around items-center">
-                            <!-- Quick Withdraw Tab -->
                             <button onclick="switchTab('quick_withdraw')" class="flex-1 py-3 flex justify-center items-center relative group">
                                 <i data-lucide="zap" class="w-7 h-7 ${state.activeTab === 'quick_withdraw' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
                                 ${state.activeTab === 'quick_withdraw' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
                             </button>
 
-                            <!-- Admin: Deposit Tab -->
                             ${isAdmin ? `
                             <button onclick="switchTab('deposit')" class="flex-1 py-3 flex justify-center items-center relative group">
                                 <i data-lucide="arrow-down-circle" class="w-7 h-7 ${state.activeTab === 'deposit' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
                                 ${state.activeTab === 'deposit' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
                             </button>` : ''}
 
-                            <!-- Reports Tab -->
                             <button onclick="switchTab('withdraw_reports')" class="flex-1 py-3 flex justify-center items-center relative group">
                                 <i data-lucide="file-text" class="w-7 h-7 ${state.activeTab === 'withdraw_reports' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
                                 ${state.activeTab === 'withdraw_reports' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
                             </button>
 
-                            <!-- Admin: Settings Tab -->
                             ${isAdmin ? `
                             <button onclick="switchTab('settings')" class="flex-1 py-3 flex justify-center items-center relative group">
                                 <i data-lucide="menu" class="w-7 h-7 ${state.activeTab === 'settings' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
@@ -634,7 +637,7 @@
             const isEditing = !!state.editingTx;
             const editData = state.editingTx || {};
 
-            // 1. STANDARD FORM (Only for Deposit or Edit)
+            // 1. STANDARD FORM
             const standardFormHtml = `
                 <div class="bg-white p-4 md:p-8 rounded-xl shadow-sm border border-gray-100 max-w-3xl mx-auto">
                     <h3 class="text-xl font-bold mb-6 flex gap-2 items-center text-blue-800 border-b pb-4">
@@ -651,12 +654,10 @@
                                 <input type="number" id="amount" step="0.01" class="w-full p-4 border rounded-lg text-lg font-bold text-blue-600 bg-gray-50 focus:bg-white transition" required placeholder="0.00" value="${editData.amount || ''}" inputmode="decimal">
                             </div>
                         </div>
-                        
                         <div class="flex flex-col gap-2">
                             <label class="text-sm font-bold text-gray-700">ឈ្មោះគណនេយ្យ</label>
                             <input type="text" id="account_name" class="w-full p-4 border rounded-lg text-lg bg-gray-50 focus:bg-white transition" placeholder="ឈ្មោះអតិថិជន" value="${editData.account_name || ''}" inputmode="text">
                         </div>
-
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div class="flex flex-col gap-2">
                                 <label class="text-sm font-bold text-gray-700">ធនាគារ</label>
@@ -678,7 +679,6 @@
                                 </div>
                             </div>
                         </div>
-                        
                         <div class="flex flex-col gap-2">
                             <label class="text-sm font-bold text-gray-700">ស្ថានភាព</label>
                             <div class="relative">
@@ -689,7 +689,6 @@
                                 <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500"><i data-lucide="chevron-down"></i></div>
                             </div>
                         </div>
-
                         <div class="flex gap-3 mt-4 pt-4 border-t">
                             <button type="button" onclick="toggleForm()" class="flex-1 py-3 bg-gray-100 text-gray-800 rounded-lg font-bold text-lg hover:bg-gray-200 transition">បោះបង់</button>
                             <button type="submit" id="submit-tx-btn" class="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 shadow-sm transition">
@@ -723,12 +722,13 @@
             else if (isQuickWithdraw) activeFormHtml = quickWithdrawFormHtml;
             else activeFormHtml = standardFormHtml; 
 
+            // CENTERED POSTS
             const postsHtml = state.posts.length > 0 ? `
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="flex flex-col items-center gap-4 mb-6 w-full">
                     ${state.posts.map(post => `
-                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 hover:shadow-md transition w-full max-w-2xl">
                             <div class="flex items-start gap-3">
-                                <div class="bg-blue-50 p-2 rounded-full text-blue-600"><i data-lucide="megaphone" class="w-5 h-5"></i></div>
+                                <div class="bg-blue-50 p-2 rounded-full text-blue-600 shrink-0"><i data-lucide="megaphone" class="w-5 h-5"></i></div>
                                 <div>
                                     <h4 class="font-bold text-gray-800 text-lg">${post.title}</h4>
                                     <p class="text-sm text-gray-600 mt-1 leading-relaxed">${post.content || ''}</p>
@@ -751,11 +751,71 @@
                     </div>
                 `;
             } else {
+                // Deposit or Withdraw Reports Page
                 const title = isDeposit ? 'បញ្ជីវេរចូល' : 'របាយការណ៍ដកប្រាក់';
                 
+                // --- REPORTS SUMMARY LOGIC ---
+                let summaryHtml = '';
+                if (isWithdrawReports) {
+                    // Filter logic for summary
+                    let reportData = state.transactions;
+                    if (isAdmin && state.filterUser) {
+                        reportData = state.transactions.filter(t => t.user_email === state.filterUser);
+                    }
+                    // For Normal user, RLS already limits data to their own, so reportData is correct.
+
+                    const totalCount = reportData.length;
+                    
+                    // Group by currency
+                    const totalsByCurrency = reportData.reduce((acc, curr) => {
+                        const currCode = curr.currency || 'USD';
+                        acc[currCode] = (acc[currCode] || 0) + curr.amount;
+                        return acc;
+                    }, {});
+
+                    const totalAmountStr = Object.entries(totalsByCurrency)
+                        .map(([curr, amt]) => `<div class="font-mono text-blue-600">${amt.toFixed(2)} <span class="text-xs text-gray-500">${curr}</span></div>`)
+                        .join('') || '<div class="text-gray-400">0.00</div>';
+
+                    // Filter Dropdown for Admin
+                    let filterHtml = '';
+                    if (isAdmin) {
+                        // Extract unique users from all loaded transactions (since Admin sees all)
+                        const uniqueUsers = [...new Set(state.transactions.map(t => t.user_email))];
+                        filterHtml = `
+                            <div class="mb-4">
+                                <select onchange="setFilterUser(this.value)" class="w-full sm:w-auto p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                                    <option value="">បង្ហាញទិន្នន័យសរុប (All Users)</option>
+                                    ${uniqueUsers.map(email => `<option value="${email}" ${state.filterUser === email ? 'selected' : ''}>${email}</option>`).join('')}
+                                </select>
+                            </div>
+                        `;
+                    }
+
+                    summaryHtml = `
+                        <div class="mb-6 space-y-4">
+                            ${filterHtml}
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
+                                    <span class="text-gray-500 text-xs uppercase font-bold tracking-wider">ចំនួនវិក្កយបត្រ</span>
+                                    <span class="text-2xl font-bold text-gray-800 mt-1">${totalCount}</span>
+                                </div>
+                                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
+                                    <span class="text-gray-500 text-xs uppercase font-bold tracking-wider">ទឹកប្រាក់សរុប</span>
+                                    <div class="mt-1 text-xl font-bold flex flex-col items-center">
+                                        ${totalAmountStr}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
                 bodyContent = `
                     <div class="max-w-6xl mx-auto">
-                        ${postsHtml}
+                        <!-- Only show posts on Deposit page if you want, usually hidden on reports -->
+                        ${isDeposit ? postsHtml : ''}
+                        
                         <div class="flex justify-between items-center mb-4 px-1">
                             <h2 class="text-xl font-bold text-gray-800">${title}</h2>
                             ${allowAdd ? `
@@ -765,7 +825,11 @@
                                 </button>` 
                             : ''}
                         </div>
+                        
+                        ${summaryHtml}
+
                         ${!allowAdd && !state.showForm && isDeposit ? '<div class="bg-blue-50 text-blue-800 p-3 rounded-lg mb-4 text-sm border border-blue-100 flex gap-2"><i data-lucide="eye" class="w-4 h-4 mt-0.5"></i> Read Only Mode</div>' : ''}
+                        
                         ${state.showForm ? activeFormHtml : `
                             <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                                 <div class="overflow-x-auto">
@@ -813,7 +877,7 @@
             }
         }
 
-        // ... (Keep existing renderSettingsContent and renderTransactionTable logic) ...
+        // ... (Keep existing renderSettingsContent) ...
         function renderSettingsContent() {
             const container = document.getElementById('main-content');
             
@@ -934,12 +998,23 @@
         function renderTransactionTable() {
             const tbody = document.getElementById('transaction-table-body');
             if(!tbody) return;
-            if(state.transactions.length === 0) { tbody.innerHTML = '<tr><td colspan="8" class="p-12 text-center text-gray-400 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-12 h-12 opacity-50"></i><span>គ្មានទិន្នន័យ</span></td></tr>'; lucide.createIcons(); return; }
+            
+            // FILTER FOR TABLE VIEW
+            let displayData = state.transactions;
+            if (state.activeTab === 'withdraw_reports' && state.role === 'admin' && state.filterUser) {
+                displayData = state.transactions.filter(t => t.user_email === state.filterUser);
+            }
+
+            if(displayData.length === 0) { 
+                tbody.innerHTML = '<tr><td colspan="8" class="p-12 text-center text-gray-400 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-12 h-12 opacity-50"></i><span>គ្មានទិន្នន័យ</span></td></tr>'; 
+                lucide.createIcons(); 
+                return; 
+            }
             
             const isDeposit = state.activeTab === 'deposit';
             const isAdmin = state.role === 'admin';
 
-            tbody.innerHTML = state.transactions.map(tx => {
+            tbody.innerHTML = displayData.map(tx => {
                 const isCompleted = tx.status === 'completed';
                 const badgeClass = isCompleted 
                     ? 'bg-green-100 text-green-700 border-green-200' 
