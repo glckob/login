@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ប្រព័ន្ធគ្រប់គ្រងវេរប្រាក់ (Money Transfer)</title>
+    
+    <!-- External Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Hanuman:wght@100;300;400;700;900&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <style>
+        body { font-family: 'Hanuman', sans-serif, ui-sans-serif, system-ui; background-color: #f3f4f6; }
+        /* Mobile Optimization */
+        input, select, button { touch-action: manipulation; } /* Prevent double-tap zoom */
+        
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #2563eb; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .active-nav { background-color: #2563eb; color: white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .inactive-nav { color: #cbd5e1; }
+        .inactive-nav:hover { background-color: #1e293b; color: white; }
+        
+        /* Better Focus States for Mobile */
+        input:focus, select:focus, textarea:focus { border-color: #2563eb; outline: none; ring: 2px; --tw-ring-color: #93c5fd; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
+        
+        /* Modal Styles */
+        #custom-modal { transition: opacity 0.2s ease-in-out; }
+        .modal-hidden { opacity: 0; pointer-events: none; }
+        .modal-visible { opacity: 1; pointer-events: auto; }
+    </style>
+</head>
+<body>
+
+    <!-- App Container -->
+    <div id="app" class="min-h-screen flex flex-col"></div>
+
+    <!-- Custom Modal/Dialog Component -->
+    <div id="custom-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center modal-hidden p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm transform transition-all scale-100">
+            <h3 id="modal-title" class="text-xl font-bold text-gray-800 mb-2">ចំណងជើង</h3>
+            <p id="modal-message" class="text-gray-600 mb-6 leading-relaxed">ខ្លឹមសារសារ...</p>
+            <div class="flex flex-col sm:flex-row justify-end gap-3">
+                <button id="modal-confirm" class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold shadow-lg shadow-blue-200">យល់ព្រម</button>
+                <button id="modal-cancel" class="w-full sm:w-auto px-6 py-3 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 transition font-medium">បោះបង់</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const supabaseUrl = 'https://uafiagvtvrukjknoviqq.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhZmlhZ3Z0dnJ1a2prbm92aXFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0MDM3NDEsImV4cCI6MjA3OTk3OTc0MX0.DaF6FE34R5mcHZWvXGnoIfbzMJWwtATb1_aZ52QKVmU';
+        
+        const { createClient } = window.supabase;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // --- STATE ---
+        const state = {
+            session: null,
+            role: null,
+            activeTab: 'deposit', 
+            transactions: [],
+            loading: true,
+            authMode: 'login',
+            showForm: false,
+            banks: [],
+            currencies: [],
+            posts: [],
+            users: [],
+            editingTx: null,
+            editingSetting: null
+        };
+
+        // --- CUSTOM DIALOG SYSTEM ---
+        const dialog = {
+            show: (title, message, isConfirm = false, onConfirm = null) => {
+                const modal = document.getElementById('custom-modal');
+                const titleEl = document.getElementById('modal-title');
+                const msgEl = document.getElementById('modal-message');
+                const confirmBtn = document.getElementById('modal-confirm');
+                const cancelBtn = document.getElementById('modal-cancel');
+
+                titleEl.innerText = title;
+                msgEl.innerText = message;
+
+                const newConfirmBtn = confirmBtn.cloneNode(true);
+                confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+                
+                const newCancelBtn = cancelBtn.cloneNode(true);
+                cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+                if (isConfirm) {
+                    newCancelBtn.style.display = 'block';
+                    newCancelBtn.onclick = () => modal.classList.replace('modal-visible', 'modal-hidden');
+                    
+                    newConfirmBtn.innerText = 'យល់ព្រម';
+                    newConfirmBtn.className = "w-full sm:w-auto px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-bold shadow-lg shadow-red-200";
+                    newConfirmBtn.onclick = () => {
+                        modal.classList.replace('modal-visible', 'modal-hidden');
+                        if (onConfirm) onConfirm();
+                    };
+                } else {
+                    newCancelBtn.style.display = 'none';
+                    newConfirmBtn.innerText = 'បិទ';
+                    newConfirmBtn.className = "w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold shadow-lg shadow-blue-200";
+                    newConfirmBtn.onclick = () => modal.classList.replace('modal-visible', 'modal-hidden');
+                }
+
+                modal.classList.replace('modal-hidden', 'modal-visible');
+            }
+        };
+        const showAlert = (title, msg) => dialog.show(title, msg, false);
+        const showConfirm = (title, msg, callback) => dialog.show(title, msg, true, callback);
+
+
+        // --- INITIALIZATION ---
+        async function initApp() {
+            renderLoading();
+            const { data: { session } } = await supabase.auth.getSession();
+            state.session = session;
+
+            if (session) {
+                await fetchRole(session.user.id);
+            } else {
+                state.loading = false;
+                renderAuth();
+            }
+
+            supabase.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'TOKEN_REFRESHED') {
+                    state.session = session;
+                    return;
+                }
+                if (event === 'SIGNED_IN' && state.session?.user?.id === session?.user?.id && state.role) {
+                    state.session = session;
+                    return;
+                }
+
+                state.session = session;
+                if (session) {
+                    state.loading = true;
+                    renderLoading();
+                    await fetchRole(session.user.id);
+                } else {
+                    state.role = null;
+                    state.loading = false;
+                    renderAuth();
+                }
+            });
+        }
+
+        async function fetchRole(userId) {
+            try {
+                const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
+                state.role = data ? data.role : 'user';
+                
+                if (state.role !== 'admin') {
+                    state.activeTab = 'withdraw';
+                } else {
+                    state.activeTab = 'deposit'; 
+                }
+
+            } catch (error) {
+                console.error('Error fetching role:', error);
+                state.role = 'user';
+                state.activeTab = 'withdraw';
+            } finally {
+                await Promise.all([fetchBanks(), fetchPosts(), fetchCurrencies()]);
+                state.loading = false;
+                renderDashboard();
+                fetchTransactions();
+            }
+        }
+
+        // --- FETCH DATA ---
+        async function fetchBanks() { const { data } = await supabase.from('banks').select('*').order('name'); state.banks = data || []; }
+        async function fetchCurrencies() { const { data } = await supabase.from('currencies').select('*').order('code'); state.currencies = data || []; }
+        async function fetchPosts() { const { data } = await supabase.from('posts').select('*').order('created_at', { ascending: false }); state.posts = data || []; }
+
+        async function fetchUsers() { 
+            if(state.role !== 'admin') return;
+            const { data } = await supabase.from('profiles').select('*').order('email'); 
+            state.users = data || []; 
+            renderSettingsContent();
+        }
+
+        async function fetchTransactions() {
+            if (state.activeTab === 'settings') return;
+            
+            const currentTab = state.activeTab;
+            const tableBody = document.getElementById('transaction-table-body');
+            if(tableBody) tableBody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-gray-500">កំពុងទាញទិន្នន័យ...</td></tr>';
+
+            const { data, error } = await supabase
+                .from('transactions')
+                .select('*')
+                .eq('transaction_type', currentTab)
+                .order('created_at', { ascending: false });
+
+            if (state.activeTab !== currentTab) return;
+
+            if (!error) {
+                state.transactions = data;
+                renderTransactionTable();
+            } else {
+                if(tableBody) tableBody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-500">មានបញ្ហា: ${error.message}</td></tr>`;
+            }
+        }
+
+        // --- ACTIONS ---
+        async function handleAuth(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('auth-btn');
+            
+            btn.disabled = true;
+            btn.innerText = 'កំពុងដំណើរការ...';
+
+            try {
+                let result;
+                if (state.authMode === 'login') result = await supabase.auth.signInWithPassword({ email, password });
+                else result = await supabase.auth.signUp({ email, password });
+
+                if (result.error) throw result.error;
+                if (state.authMode === 'signup' && result.data) {
+                    showAlert('ជោគជ័យ', "ចុះឈ្មោះជោគជ័យ! សូមចូលប្រើប្រាស់។");
+                    state.authMode = 'login';
+                    renderAuth();
+                }
+            } catch (err) {
+                showAlert('បរាជ័យ', err.message);
+                btn.disabled = false;
+                btn.innerText = state.authMode === 'login' ? 'ចូលប្រើប្រាស់' : 'ចុះឈ្មោះ';
+            }
+        }
+
+        async function handleLogout() { await supabase.auth.signOut(); }
+
+        // --- CRUD ACTIONS: TRANSACTIONS ---
+
+        window.editTransaction = (txId) => {
+            const tx = state.transactions.find(t => t.id === txId);
+            if(tx) {
+                state.editingTx = tx;
+                state.showForm = true;
+                renderDashboardContent();
+            }
+        };
+
+        window.deleteTransaction = (txId) => {
+            showConfirm('លុបទិន្នន័យ', 'តើអ្នកពិតជាចង់លុបទិន្នន័យនេះមែនទេ? សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ។', async () => {
+                const { error } = await supabase.from('transactions').delete().eq('id', txId);
+                if(error) {
+                    showAlert('បរាជ័យ', 'មិនអាចលុបបានទេ: ' + error.message);
+                } else {
+                    showAlert('ជោគជ័យ', 'លុបទិន្នន័យជោគជ័យ');
+                    fetchTransactions();
+                }
+            });
+        };
+
+        async function handleTransactionSubmit(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submit-tx-btn');
+            btn.disabled = true; btn.innerText = 'កំពុងដំណើរការ...';
+
+            const isEditing = !!state.editingTx;
+            const isWithdrawTab = state.activeTab === 'withdraw';
+
+            // --- A. WITHDRAW SEARCH (Create Only) ---
+            if (isWithdrawTab && !isEditing) {
+                const invoiceNumber = document.getElementById('withdraw_invoice').value.trim();
+                
+                if (!invoiceNumber) {
+                    showAlert('ជូនដំណឹង', 'សូមបញ្ចូលលេខវិក្កយបត្រ');
+                    btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
+                    return;
+                }
+
+                const { data: depositRecord, error: searchError } = await supabase
+                    .from('transactions')
+                    .select('*')
+                    .eq('transaction_type', 'deposit')
+                    .eq('invoice_number', invoiceNumber)
+                    .eq('status', 'pending')
+                    .single();
+
+                if (searchError || !depositRecord) {
+                    showAlert('បរាជ័យ', 'រកមិនឃើញវិក្កយបត្រនេះទេ (INV: ' + invoiceNumber + ') ឬទឹកប្រាក់ត្រូវបានដករួចរាល់ហើយ។');
+                    btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
+                    return;
+                }
+
+                const confirmMsg = `រកឃើញវិក្កយបត្រ: ${depositRecord.invoice_number}\nទឹកប្រាក់: $${depositRecord.amount} ${depositRecord.currency || ''}\nឈ្មោះ: ${depositRecord.account_name}\n\nតើអ្នកចង់ធ្វើការដកប្រាក់នេះមែនទេ?`;
+                
+                showConfirm('បញ្ជាក់ការដកប្រាក់', confirmMsg, async () => {
+                    const { error: insertError } = await supabase.from('transactions').insert([{
+                        transaction_type: 'withdraw',
+                        invoice_number: depositRecord.invoice_number,
+                        amount: depositRecord.amount,
+                        account_name: depositRecord.account_name,
+                        bank_name: depositRecord.bank_name,
+                        currency: depositRecord.currency,
+                        user_email: state.session.user.email,
+                        status: 'completed'
+                    }]);
+
+                    if (insertError) {
+                        showAlert('បរាជ័យ', 'បរាជ័យក្នុងការបង្កើតទិន្នន័យដកប្រាក់: ' + insertError.message);
+                        btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
+                        return;
+                    }
+
+                    const { data: updatedData, error: updateError } = await supabase
+                        .from('transactions')
+                        .update({ status: 'completed', withdrawn_by: state.session.user.email })
+                        .eq('id', depositRecord.id)
+                        .select();
+
+                    if (updateError) {
+                        showAlert('ព្រមាន', 'Error updating deposit status: ' + updateError.message);
+                    } else if (updatedData && updatedData.length === 0) {
+                        showAlert('បញ្ហាសិទ្ធិ', 'ប្រព័ន្ធមិនអាចកែប្រែស្ថានភាពវេរចូលចាស់បានទេ។');
+                    } else {
+                        showAlert('ជោគជ័យ', 'ដកប្រាក់ជោគជ័យ!');
+                        state.showForm = false;
+                        fetchTransactions();
+                    }
+                });
+                btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
+                return;
+            }
+
+            // --- B. STANDARD FORM (Insert or Update) ---
+            const invoiceNumber = document.getElementById('invoice_number').value.trim();
+            const amount = parseFloat(document.getElementById('amount').value);
+            const accountName = document.getElementById('account_name').value;
+            const bankSelect = document.getElementById('bank_name');
+            const bankName = bankSelect.options[bankSelect.selectedIndex].text;
+            const status = document.getElementById('status_select').value;
+            const currency = document.getElementById('currency_select').value;
+
+            if (!invoiceNumber) {
+                showAlert('ជូនដំណឹង', 'សូមបញ្ចូលលេខវិក្កយបត្រ');
+                btn.disabled = false; btn.innerText = isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក';
+                return;
+            }
+
+            if (!isEditing || (isEditing && invoiceNumber !== state.editingTx.invoice_number)) {
+                const { data: existing } = await supabase
+                    .from('transactions')
+                    .select('id')
+                    .eq('transaction_type', 'deposit') 
+                    .eq('invoice_number', invoiceNumber)
+                    .maybeSingle();
+
+                if (existing) {
+                    if (!isEditing || existing.id !== state.editingTx.id) {
+                        showAlert('បរាជ័យ', 'លេខវិក្កយបត្រនេះមាននៅក្នុងប្រព័ន្ធរួចហើយ!');
+                        btn.disabled = false; btn.innerText = isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក';
+                        return;
+                    }
+                }
+            }
+
+            const formData = {
+                invoice_number: invoiceNumber,
+                amount: amount,
+                account_name: accountName,
+                bank_name: bankName,
+                currency: currency,
+                status: status,
+            };
+
+            if (!isEditing) {
+                formData.transaction_type = 'deposit'; 
+                formData.user_email = state.session.user.email;
+                
+                const { error } = await supabase.from('transactions').insert([formData]);
+                if (error) showAlert('បរាជ័យ', error.message);
+                else {
+                    showAlert('ជោគជ័យ', 'រក្សាទុកជោគជ័យ!');
+                    state.showForm = false;
+                    fetchTransactions();
+                }
+            } else {
+                const { error } = await supabase.from('transactions').update(formData).eq('id', state.editingTx.id);
+                if (error) showAlert('បរាជ័យ', 'កែប្រែមិនបានសម្រេច: ' + error.message);
+                else {
+                    showAlert('ជោគជ័យ', 'កែប្រែទិន្នន័យជោគជ័យ!');
+                    state.editingTx = null;
+                    state.showForm = false;
+                    fetchTransactions();
+                }
+            }
+            btn.disabled = false;
+        }
+
+        // --- CRUD ACTIONS: SETTINGS ---
+
+        window.prepareEditSetting = (table, id) => {
+            let item;
+            if(table === 'banks') item = state.banks.find(i => i.id === id);
+            else if(table === 'currencies') item = state.currencies.find(i => i.id === id);
+            else if(table === 'posts') item = state.posts.find(i => i.id === id);
+
+            if(item) {
+                state.editingSetting = { table, ...item };
+                renderSettingsContent();
+            }
+        };
+
+        window.cancelEditSetting = () => {
+            state.editingSetting = null;
+            renderSettingsContent();
+        }
+
+        async function saveSetting(table, inputId) {
+            const input = document.getElementById(inputId);
+            const value = input.value.trim();
+            if(!value) return;
+
+            const isEditing = state.editingSetting && state.editingSetting.table === table;
+            
+            let payload = {};
+            if(table === 'currencies') payload.code = value;
+            else if(table === 'posts') {
+                payload.title = value; 
+                if(document.getElementById('post-content')) payload.content = document.getElementById('post-content').value;
+            }
+            else payload.name = value;
+
+            let error;
+            if(isEditing) {
+                const { error: err } = await supabase.from(table).update(payload).eq('id', state.editingSetting.id);
+                error = err;
+            } else {
+                const { error: err } = await supabase.from(table).insert([payload]);
+                error = err;
+            }
+
+            if(error) showAlert('បរាជ័យ', error.message);
+            else {
+                if(inputId) document.getElementById(inputId).value = '';
+                if(document.getElementById('post-content')) document.getElementById('post-content').value = '';
+                state.editingSetting = null;
+                
+                if(table === 'banks') await fetchBanks();
+                if(table === 'currencies') await fetchCurrencies();
+                if(table === 'posts') await fetchPosts();
+                
+                renderSettingsContent();
+            }
+        }
+
+        async function deleteSettingItem(table, id) {
+            showConfirm('បញ្ជាក់', 'តើអ្នកពិតជាចង់លុបមែនទេ?', async () => {
+                const { error } = await supabase.from(table).delete().eq('id', id);
+                if(error) showAlert('បរាជ័យ', error.message);
+                else {
+                    if(table === 'banks') await fetchBanks();
+                    if(table === 'posts') await fetchPosts();
+                    if(table === 'currencies') await fetchCurrencies();
+                    renderSettingsContent();
+                }
+            });
+        }
+
+        async function setDefault(table, id) {
+            const rpcName = table === 'banks' ? 'set_default_bank' : 'set_default_currency';
+            const { error } = await supabase.rpc(rpcName, { row_id: id });
+            
+            if(error) {
+                console.error("RPC Error:", error);
+                showAlert('បរាជ័យ', 'មិនអាចកំណត់លំនាំដើមបានទេ: ' + error.message);
+            } else {
+                if(table === 'banks') await fetchBanks();
+                if(table === 'currencies') await fetchCurrencies();
+                renderSettingsContent();
+            }
+        }
+
+        // Users
+        async function updateUserRole(userId, newRole) {
+            const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
+            if(error) showAlert('បរាជ័យ', error.message);
+            else fetchUsers();
+        }
+
+        async function deleteUser(userId) {
+            showConfirm('បញ្ជាក់', 'ការលុបនេះនឹងដកសិទ្ធិប្រើប្រាស់របស់ User នេះ។ តើអ្នកច្បាស់ទេ?', async () => {
+                const { error } = await supabase.from('profiles').delete().eq('id', userId);
+                if(error) showAlert('បរាជ័យ', error.message);
+                else fetchUsers();
+            });
+        }
+
+        // --- NAVIGATION & UI ---
+        function switchTab(tab) {
+            state.activeTab = tab;
+            state.showForm = false;
+            state.editingTx = null; 
+            renderDashboard();
+            if(tab === 'settings') fetchUsers(); 
+            else fetchTransactions();
+        }
+
+        function toggleForm() { 
+            state.showForm = !state.showForm; 
+            if(!state.showForm) state.editingTx = null;
+            renderDashboardContent(); 
+        }
+        function toggleAuthMode() { state.authMode = state.authMode === 'login' ? 'signup' : 'login'; renderAuth(); }
+
+        function renderLoading() {
+            document.getElementById('app').innerHTML = `<div class="flex items-center justify-center h-screen"><div class="loader"></div></div>`;
+        }
+
+        function renderAuth() {
+            const isLogin = state.authMode === 'login';
+            document.getElementById('app').innerHTML = `
+                <div class="flex items-center justify-center min-h-screen bg-slate-100 p-4">
+                    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+                        <h1 class="text-2xl font-bold text-center mb-6 text-blue-800">ប្រព័ន្ធគ្រប់គ្រងវេរប្រាក់</h1>
+                        <form id="auth-form" class="space-y-4">
+                            <input type="email" id="email" required placeholder="Email" class="w-full p-4 border rounded-lg text-lg outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="password" id="password" required placeholder="Password" class="w-full p-4 border rounded-lg text-lg outline-none focus:ring-2 focus:ring-blue-500">
+                            <button type="submit" id="auth-btn" class="w-full bg-blue-600 text-white p-4 rounded-lg font-bold text-lg hover:bg-blue-700 transition">${isLogin ? 'ចូលប្រើប្រាស់' : 'ចុះឈ្មោះ'}</button>
+                        </form>
+                        <p class="text-center mt-6 text-blue-600 cursor-pointer text-lg" onclick="toggleAuthMode()">
+                            ${isLogin ? 'ចុះឈ្មោះគណនេយ្យថ្មី' : 'ចូលប្រើប្រាស់គណនេយ្យដែលមានស្រាប់'}
+                        </p>
+                    </div>
+                </div>`;
+            document.getElementById('auth-form').addEventListener('submit', handleAuth);
+        }
+
+        function renderDashboard() {
+            const isAdmin = state.role === 'admin';
+            document.getElementById('app').innerHTML = `
+                <div class="flex h-screen bg-gray-100 font-sans overflow-hidden">
+                    <div class="w-64 bg-slate-900 text-white hidden md:flex flex-col shadow-xl z-10">
+                        <div class="p-6 border-b border-slate-700">
+                            <h2 class="text-xl font-bold flex items-center gap-2"><i data-lucide="arrow-right-left" class="text-blue-400"></i> MoneyTransfer</h2>
+                            <p class="text-xs text-slate-400 mt-2">${state.session.user.email} (${state.role})</p>
+                        </div>
+                        <nav class="flex-1 p-4 space-y-2">
+                            ${isAdmin ? `
+                            <button onclick="switchTab('deposit')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'deposit' ? 'active-nav' : 'inactive-nav'}">
+                                <i data-lucide="arrow-down-circle"></i> វេរចូល (Deposit)
+                            </button>` : ''}
+                            
+                            <button onclick="switchTab('withdraw')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'withdraw' ? 'active-nav' : 'inactive-nav'}">
+                                <i data-lucide="arrow-up-circle"></i> ដកប្រាក់ (Withdraw)
+                            </button>
+                            
+                            ${isAdmin ? `
+                            <button onclick="switchTab('settings')" class="flex items-center gap-3 w-full p-3 rounded-lg ${state.activeTab === 'settings' ? 'active-nav' : 'inactive-nav'}">
+                                <i data-lucide="settings"></i> ការកំណត់ (Settings)
+                            </button>` : ''}
+                        </nav>
+                        <div class="p-4"><button onclick="handleLogout()" class="flex items-center gap-2 text-red-300 w-full p-2"><i data-lucide="log-out"></i> ចាកចេញ</button></div>
+                    </div>
+                    
+                    <div class="flex-1 flex flex-col h-full overflow-hidden">
+                        <div class="md:hidden bg-slate-900 text-white p-4 flex justify-between shadow-md z-20">
+                            <h2 class="font-bold text-lg">MoneyTransfer</h2>
+                            <button onclick="handleLogout()"><i data-lucide="log-out"></i></button>
+                        </div>
+                         <div class="md:hidden bg-slate-800 text-white flex justify-around p-2 text-sm shadow-md z-10">
+                            ${isAdmin ? `<button onclick="switchTab('deposit')" class="p-2 flex-1 text-center ${state.activeTab==='deposit'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">វេរចូល</button>` : ''}
+                            <button onclick="switchTab('withdraw')" class="p-2 flex-1 text-center ${state.activeTab==='withdraw'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">ដកប្រាក់</button>
+                            ${isAdmin ? `<button onclick="switchTab('settings')" class="p-2 flex-1 text-center ${state.activeTab==='settings'?'text-blue-400 font-bold border-b-2 border-blue-400':''}">កំណត់</button>`:''}
+                         </div>
+                        <main id="main-content" class="flex-1 overflow-auto p-4 md:p-6 bg-gray-50 pb-20"></main>
+                    </div>
+                </div>`;
+            lucide.createIcons();
+            renderDashboardContent();
+        }
+
+        function renderDashboardContent() {
+            const container = document.getElementById('main-content');
+            if (state.activeTab === 'settings') {
+                renderSettingsContent();
+                return;
+            }
+
+            const isDeposit = state.activeTab === 'deposit';
+            const isWithdraw = state.activeTab === 'withdraw';
+            const isAdmin = state.role === 'admin';
+            
+            const isEditing = !!state.editingTx;
+            const editData = state.editingTx || {};
+
+            // 1. STANDARD FORM (MOBILE OPTIMIZED)
+            const standardFormHtml = `
+                <div class="bg-white p-4 md:p-8 rounded-xl shadow-xl border border-gray-100 max-w-3xl mx-auto">
+                    <h3 class="text-2xl font-bold mb-6 flex gap-2 items-center text-blue-800 border-b pb-4">
+                        <i data-lucide="edit" class="w-6 h-6"></i> ${isEditing ? 'កែប្រែទិន្នន័យ' : 'បញ្ចូលទិន្នន័យវេរចូល'}
+                    </h3>
+                    <form id="transaction-form" class="flex flex-col gap-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="flex flex-col gap-2">
+                                <label class="text-sm font-bold text-gray-700">លេខវិក្កយបត្រ (Invoice)</label>
+                                <input type="text" id="invoice_number" class="w-full p-4 border rounded-lg text-lg bg-gray-50 focus:bg-white transition" placeholder="INV-001" required value="${editData.invoice_number || ''}" inputmode="text">
+                            </div>
+                            <div class="flex flex-col gap-2">
+                                <label class="text-sm font-bold text-gray-700">ចំនួនទឹកប្រាក់ ($)</label>
+                                <input type="number" id="amount" step="0.01" class="w-full p-4 border rounded-lg text-lg font-bold text-blue-600 bg-gray-50 focus:bg-white transition" required placeholder="0.00" value="${editData.amount || ''}" inputmode="decimal">
+                            </div>
+                        </div>
+                        
+                        <div class="flex flex-col gap-2">
+                            <label class="text-sm font-bold text-gray-700">ឈ្មោះគណនេយ្យ</label>
+                            <input type="text" id="account_name" class="w-full p-4 border rounded-lg text-lg bg-gray-50 focus:bg-white transition" placeholder="ឈ្មោះអតិថិជន" value="${editData.account_name || ''}" inputmode="text">
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="flex flex-col gap-2">
+                                <label class="text-sm font-bold text-gray-700">ធនាគារ</label>
+                                <div class="relative">
+                                    <select id="bank_name" class="w-full p-4 border rounded-lg text-lg bg-white appearance-none cursor-pointer">
+                                        <option value="">ជ្រើសរើសធនាគារ</option>
+                                        ${state.banks.map(b => `<option value="${b.id}" ${(isEditing ? (b.name === editData.bank_name) : b.is_default) ? 'selected' : ''}>${b.name}</option>`).join('')}
+                                    </select>
+                                    <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500"><i data-lucide="chevron-down"></i></div>
+                                </div>
+                            </div>
+                            <div class="flex flex-col gap-2">
+                                 <label class="text-sm font-bold text-gray-700">រូបិយប័ណ្ណ</label>
+                                 <div class="relative">
+                                     <select id="currency_select" class="w-full p-4 border rounded-lg text-lg bg-white appearance-none cursor-pointer">
+                                        ${state.currencies.map(c => `<option value="${c.code}" ${(isEditing ? (c.code === editData.currency) : c.is_default) ? 'selected' : ''}>${c.code}</option>`).join('')}
+                                    </select>
+                                    <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500"><i data-lucide="chevron-down"></i></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex flex-col gap-2">
+                            <label class="text-sm font-bold text-gray-700">ស្ថានភាព</label>
+                            <div class="relative">
+                                <select id="status_select" class="w-full p-4 border rounded-lg text-lg bg-white font-medium text-gray-700 appearance-none">
+                                    <option value="pending" ${editData.status === 'pending' ? 'selected' : ''}>មិនទាន់ដក</option>
+                                    <option value="completed" ${editData.status === 'completed' ? 'selected' : ''}>បានដក(គណនេយ្យ)</option>
+                                </select>
+                                <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500"><i data-lucide="chevron-down"></i></div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-3 mt-4 pt-4 border-t">
+                            <button type="button" onclick="toggleForm()" class="flex-1 py-4 bg-gray-100 text-gray-800 rounded-lg font-bold text-lg hover:bg-gray-200 transition">បោះបង់</button>
+                            <button type="submit" id="submit-tx-btn" class="flex-1 py-4 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition">
+                                ${isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក'}
+                            </button>
+                        </div>
+                    </form>
+                </div>`;
+
+            // 2. WITHDRAW SEARCH FORM (MOBILE OPTIMIZED)
+            const withdrawFormHtml = `
+                <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl border border-red-50 max-w-xl mx-auto">
+                    <h3 class="text-2xl font-bold mb-6 flex gap-2 items-center text-red-600 border-b border-red-100 pb-4">
+                        <i data-lucide="minus-circle" class="w-7 h-7"></i> ធ្វើការដកប្រាក់
+                    </h3>
+                    <div class="bg-yellow-50 text-yellow-800 p-4 rounded-lg mb-6 text-sm border border-yellow-200 flex gap-2 items-start">
+                        <i data-lucide="info" class="w-5 h-5 shrink-0 mt-0.5"></i>
+                        <span>សូមបញ្ចូលលេខវិក្កយបត្រដើម្បីស្វែងរកទិន្នន័យវេរចូល និងធ្វើការទូទាត់។</span>
+                    </div>
+                    <form id="transaction-form" class="flex flex-col gap-6">
+                        <div class="flex flex-col gap-2">
+                            <label class="text-sm font-bold text-gray-700">លេខវិក្កយបត្រ (Invoice Number)</label>
+                            <input type="text" id="withdraw_invoice" class="w-full p-5 border-2 border-gray-200 rounded-xl text-xl text-center font-mono focus:border-red-500 focus:ring-4 focus:ring-red-100 outline-none transition" placeholder="INV-001" required inputmode="text">
+                        </div>
+                        <div class="flex flex-col gap-3 mt-2">
+                            <button type="submit" id="submit-tx-btn" class="w-full py-4 bg-red-600 text-white rounded-xl font-bold text-xl hover:bg-red-700 shadow-lg shadow-red-200 transition active:scale-[0.98]">ទូទាត់ដកប្រាក់</button>
+                            <button type="button" onclick="toggleForm()" class="w-full py-4 bg-white border border-gray-200 text-gray-600 rounded-xl font-medium text-lg hover:bg-gray-50 transition">បោះបង់</button>
+                        </div>
+                    </form>
+                </div>`;
+
+            let activeFormHtml;
+            if (isEditing) activeFormHtml = standardFormHtml;
+            else if (isWithdraw) activeFormHtml = withdrawFormHtml;
+            else activeFormHtml = standardFormHtml;
+
+            const postsHtml = state.posts.length > 0 ? `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    ${state.posts.map(post => `
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 hover:shadow-md transition">
+                            <div class="flex items-start gap-3">
+                                <div class="bg-blue-50 p-2 rounded-full text-blue-600"><i data-lucide="megaphone" class="w-5 h-5"></i></div>
+                                <div>
+                                    <h4 class="font-bold text-gray-800 text-lg">${post.title}</h4>
+                                    <p class="text-sm text-gray-600 mt-1 leading-relaxed">${post.content || ''}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : '';
+
+            // Table HTML
+            const allowAdd = isAdmin || isWithdraw;
+            const tableHtml = `
+                <div class="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-semibold tracking-wider">
+                                <tr>
+                                    <th class="p-4 whitespace-nowrap">កាលបរិច្ឆេទ</th>
+                                    <th class="p-4 whitespace-nowrap">Invoice</th>
+                                    <th class="p-4 whitespace-nowrap text-right">ទឹកប្រាក់</th>
+                                    <th class="p-4 whitespace-nowrap">ឈ្មោះ</th>
+                                    <th class="p-4 whitespace-nowrap">ធនាគារ</th>
+                                    ${isDeposit ? '<th class="p-4 text-center whitespace-nowrap">ស្ថានភាព</th>' : ''}
+                                    <th class="p-4 whitespace-nowrap">User</th>
+                                    ${isAdmin ? '<th class="p-4 text-right whitespace-nowrap">សកម្មភាព</th>' : ''}
+                                </tr>
+                            </thead>
+                            <tbody id="transaction-table-body" class="text-sm divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                </div>`;
+
+            container.innerHTML = `
+                <div class="max-w-6xl mx-auto">
+                    ${postsHtml}
+                    <div class="flex justify-between items-center mb-6 px-1">
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">${isDeposit ? 'បញ្ជីវេរចូល' : 'បញ្ជីដកប្រាក់'}</h2>
+                        ${allowAdd ? `
+                            <button onclick="toggleForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold shadow-md active:scale-95 transition">
+                                <i data-lucide="${state.showForm?'list':'plus'}" class="w-5 h-5"></i> 
+                                <span class="hidden sm:inline">${state.showForm?'បញ្ជី':'បន្ថែម'}</span>
+                                <span class="sm:hidden">${state.showForm?'បញ្ជី':'បន្ថែម'}</span>
+                            </button>` 
+                        : ''}
+                    </div>
+                    ${!allowAdd && !state.showForm ? '<div class="bg-blue-50 text-blue-800 p-4 rounded-lg mb-6 text-sm border border-blue-100 flex gap-2"><i data-lucide="eye" class="w-4 h-4 mt-0.5"></i> Read Only Mode</div>' : ''}
+                    ${state.showForm ? activeFormHtml : tableHtml}
+                </div>`;
+            
+            lucide.createIcons();
+            if(document.getElementById('transaction-form')) document.getElementById('transaction-form').addEventListener('submit', handleTransactionSubmit);
+            else if(state.transactions.length > 0) renderTransactionTable();
+        }
+
+        // ... (Keep existing renderSettingsContent and renderTransactionTable logic) ...
+        function renderSettingsContent() {
+            const container = document.getElementById('main-content');
+            
+            const renderConfigSection = (title, items, table, placeholder, fieldName = 'name') => {
+                const isEditing = state.editingSetting && state.editingSetting.table === table;
+                const editValue = isEditing ? (state.editingSetting[fieldName] || state.editingSetting.code) : '';
+                
+                return `
+                <div class="bg-white p-6 rounded-lg shadow mb-6">
+                    <h3 class="font-bold text-lg mb-4 border-b pb-2">${title}</h3>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="new-${table}" placeholder="${placeholder}" class="flex-1 p-2 border rounded" value="${editValue}">
+                        ${isEditing ? 
+                            `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-blue-600 text-white px-4 rounded hover:bg-blue-700">Update</button>
+                             <button onclick="cancelEditSetting()" class="bg-gray-400 text-white px-4 rounded hover:bg-gray-500">Cancel</button>`
+                            : 
+                            `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-green-600 text-white px-4 rounded hover:bg-green-700">បន្ថែម</button>`
+                        }
+                    </div>
+                    <ul class="space-y-2">
+                        ${items.map(item => `
+                            <li class="flex justify-between items-center bg-gray-50 p-2 rounded group">
+                                <div class="flex items-center gap-3">
+                                    <button onclick="setDefault('${table}', '${item.id}')" title="Set as Default">
+                                        <i data-lucide="star" class="w-5 h-5 ${item.is_default ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300 hover:text-yellow-400'}"></i>
+                                    </button>
+                                    <span>${item.name || item.code}</span>
+                                </div>
+                                <div class="flex gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                                    <button onclick="prepareEditSetting('${table}', '${item.id}')" class="text-blue-500"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                    <button onclick="deleteSettingItem('${table}', '${item.id}')" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                </div>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>`;
+            };
+
+            const postSection = `
+                <div class="bg-white p-6 rounded-lg shadow mb-6">
+                    <h3 class="font-bold text-lg mb-4 border-b pb-2">ព័ត៌មាន & ពាណិជ្ជកម្ម (Posts)</h3>
+                    <div class="space-y-3 mb-4 border p-4 rounded bg-gray-50">
+                        <input type="text" id="post-title" placeholder="ចំណងជើង (Title)" class="w-full p-2 border rounded" value="${state.editingSetting?.table === 'posts' ? state.editingSetting.title : ''}">
+                        <textarea id="post-content" placeholder="ខ្លឹមសារ (Content)" class="w-full p-2 border rounded" rows="2">${state.editingSetting?.table === 'posts' ? state.editingSetting.content : ''}</textarea>
+                        <div class="flex gap-2">
+                            ${state.editingSetting?.table === 'posts' ? 
+                                `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Update Post</button>
+                                 <button onclick="cancelEditSetting()" class="w-1/3 bg-gray-400 text-white py-2 rounded font-bold">Cancel</button>`
+                                : 
+                                `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">បង្ហោះ Post</button>`
+                            }
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        ${state.posts.map(post => `
+                            <div class="bg-white border rounded p-3 flex justify-between items-start group">
+                                <div>
+                                    <h4 class="font-bold text-sm">${post.title}</h4>
+                                    <p class="text-xs text-gray-500">${post.content || '-'}</p>
+                                </div>
+                                <div class="flex flex-col gap-2 opacity-50 group-hover:opacity-100">
+                                    <button onclick="prepareEditSetting('posts', '${post.id}')" class="text-blue-500"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                    <button onclick="deleteSettingItem('posts', '${post.id}')" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            const userSection = `
+                <div class="bg-white p-6 rounded-lg shadow mb-6">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                         <h3 class="font-bold text-lg">គ្រប់គ្រងអ្នកប្រើប្រាស់ (Users)</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-100">
+                                <tr><th class="p-3">Email</th><th class="p-3">Role</th><th class="p-3 text-right">Actions</th></tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                ${state.users.map(u => `
+                                    <tr>
+                                        <td class="p-3">${u.email}</td>
+                                        <td class="p-3">
+                                            <select onchange="updateUserRole('${u.id}', this.value)" class="border rounded p-1 text-xs ${u.role==='admin'?'text-blue-600 font-bold':''}">
+                                                <option value="user" ${u.role==='user'?'selected':''}>User</option>
+                                                <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
+                                            </select>
+                                        </td>
+                                        <td class="p-3 text-right">
+                                            <button onclick="deleteUser('${u.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded"><i data-lucide="trash" class="w-4 h-4"></i></button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+
+            container.innerHTML = `
+                <div class="max-w-6xl mx-auto">
+                    <h2 class="text-2xl font-bold mb-6">ការកំណត់ (Settings)</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div>
+                            ${postSection}
+                            ${renderConfigSection('ធនាគារ (Banks)', state.banks, 'banks', 'ឈ្មោះធនាគារ')}
+                            ${renderConfigSection('រូបិយប័ណ្ណ (Currencies)', state.currencies, 'currencies', 'Code (e.g. THB)', 'code')}
+                        </div>
+                        <div>
+                            ${userSection}
+                        </div>
+                    </div>
+                </div>`;
+            lucide.createIcons();
+        }
+
+        function renderTransactionTable() {
+            const tbody = document.getElementById('transaction-table-body');
+            if(!tbody) return;
+            if(state.transactions.length === 0) { tbody.innerHTML = '<tr><td colspan="8" class="p-12 text-center text-gray-400 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-12 h-12 opacity-50"></i><span>គ្មានទិន្នន័យ</span></td></tr>'; lucide.createIcons(); return; }
+            
+            const isDeposit = state.activeTab === 'deposit';
+            const isAdmin = state.role === 'admin';
+
+            tbody.innerHTML = state.transactions.map(tx => {
+                const isCompleted = tx.status === 'completed';
+                const badgeClass = isCompleted 
+                    ? 'bg-green-100 text-green-700 border-green-200' 
+                    : 'bg-yellow-100 text-yellow-700 border-yellow-200';
+                
+                const withdrawer = tx.withdrawn_by ? tx.withdrawn_by.split('@')[0] : 'គណនេយ្យ';
+                const badgeText = isCompleted ? `បានដក(${withdrawer})` : 'មិនទាន់ដក';
+
+                const statusCell = isDeposit ? `
+                    <td class="p-4 text-center">
+                        <span class="px-3 py-1 rounded-full text-xs font-bold border ${badgeClass}">
+                            ${badgeText}
+                        </span>
+                    </td>
+                ` : '';
+
+                const actionCell = isAdmin ? `
+                    <td class="p-4 text-right">
+                        <div class="flex justify-end gap-3">
+                            <button onclick="editTransaction('${tx.id}')" class="text-blue-600 hover:text-blue-800 transition" title="Edit">
+                                <i data-lucide="pencil" class="w-5 h-5"></i>
+                            </button>
+                            <button onclick="deleteTransaction('${tx.id}')" class="text-red-600 hover:text-red-800 transition" title="Delete">
+                                <i data-lucide="trash-2" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </td>
+                ` : '';
+
+                return `
+                <tr class="hover:bg-blue-50/50 transition border-b group">
+                    <td class="p-4 whitespace-nowrap text-gray-700">${new Date(tx.created_at).toLocaleDateString('km-KH')}</td>
+                    <td class="p-4 font-mono text-blue-600 text-xs font-bold bg-gray-50 rounded px-2 w-fit">${tx.invoice_number || '-'}</td>
+                    <td class="p-4 text-right font-bold ${isDeposit ? 'text-green-600' : 'text-red-600'} whitespace-nowrap">
+                        ${isDeposit?'+':'-'} ${tx.amount.toFixed(2)} <span class="text-xs text-gray-500 font-normal">${tx.currency || ''}</span>
+                    </td>
+                    <td class="p-4 font-medium text-gray-800">${tx.account_name || '-'}</td>
+                    <td class="p-4"><span class="bg-white border border-gray-200 px-2 py-1 rounded text-xs font-medium text-gray-600 shadow-sm">${tx.bank_name || 'N/A'}</span></td>
+                    ${statusCell}
+                    <td class="p-4 text-xs text-gray-500 truncate max-w-[100px]" title="${tx.user_email}">${tx.user_email.split('@')[0]}</td>
+                    ${actionCell}
+                </tr>
+            `}).join('');
+            
+            if(isAdmin) lucide.createIcons();
+        }
+
+        initApp();
+    </script>
+</body>
+</html>
