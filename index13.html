@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ប្រព័ន្ធវេរប្រាក់</title>
+    <title>ប្រព័ន្ធគ្រប់គ្រងវេរប្រាក់ (Money Transfer)</title>
     
     <!-- App Icon -->
     <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2845/2845683.png" type="image/png">
@@ -238,19 +238,30 @@
 
             if (!error) {
                 state.transactions = data;
-                if (currentTab === 'withdraw_reports') renderDashboardContent();
-                else renderTransactionTable();
-            } else if(tableBody) {
-                tableBody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-500">មានបញ្ហា: ${error.message}</td></tr>`;
+                if (currentTab === 'withdraw_reports') {
+                    renderDashboardContent();
+                } else {
+                    renderTransactionTable();
+                }
+            } else {
+                if(tableBody) tableBody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-500">មានបញ្ហា: ${error.message}</td></tr>`;
             }
         }
 
+        // --- ACTIONS ---
         async function handleAuth(e) {
             e.preventDefault();
-            const email = document.getElementById('email').value;
+            let email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
             const btn = document.getElementById('auth-btn');
-            btn.disabled = true; btn.innerText = 'កំពុងដំណើរការ...';
+            
+            // AUTO-APPEND @gmail.com Logic
+            if (!email.includes('@')) {
+                email += '@gmail.com';
+            }
+
+            btn.disabled = true;
+            btn.innerText = 'កំពុងដំណើរការ...';
 
             try {
                 let result;
@@ -275,7 +286,7 @@
             state.session = null; state.role = null; renderAuth();
         }
 
-        // --- PRINT FUNCTIONALITY (FIXED) ---
+        // --- PRINT FUNCTIONALITY ---
         window.setPrintSize = (size) => {
             state.printSize = size;
         }
@@ -539,7 +550,7 @@
 
         async function toggleReportActions() {
             const newValue = !state.allowReportActions;
-            // state.allowReportActions = newValue; renderSettingsContent(); // Disabled for now as per user request to just show disabled UI
+            // state.allowReportActions = newValue; renderSettingsContent(); // Disabled
         }
 
         function switchTab(tab) {
@@ -565,11 +576,13 @@
                             <h1 class="text-2xl font-bold text-blue-800">ប្រព័ន្ធគ្រប់គ្រងវេរប្រាក់</h1>
                         </div>
                         <form id="auth-form" class="space-y-4">
-                            <input type="email" id="email" required placeholder="Email" class="w-full p-4 border rounded-lg text-lg outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="text" id="email" required placeholder="ឈ្មោះគណនេយ្យ (ឬ Email)" class="w-full p-4 border rounded-lg text-lg outline-none focus:ring-2 focus:ring-blue-500">
                             <input type="password" id="password" required placeholder="Password" class="w-full p-4 border rounded-lg text-lg outline-none focus:ring-2 focus:ring-blue-500">
                             <button type="submit" id="auth-btn" class="w-full bg-blue-600 text-white p-4 rounded-lg font-bold text-lg hover:bg-blue-700 transition shadow-lg shadow-blue-200">${isLogin ? 'ចូលប្រើប្រាស់' : 'ចុះឈ្មោះ'}</button>
                         </form>
-                        <p class="text-center mt-6 text-blue-600 cursor-pointer text-lg" onclick="toggleAuthMode()">${isLogin ? 'ចុះឈ្មោះគណនេយ្យថ្មី' : 'ចូលប្រើប្រាស់គណនេយ្យដែលមានស្រាប់'}</p>
+                        <div class="text-center mt-6">
+                            ${isLogin ? `<p class="text-gray-400 text-lg cursor-not-allowed select-none" title="មុខងារនេះត្រូវបានបិទជាបណ្តោះអាសន្ន">ចុះឈ្មោះគណនេយ្យថ្មី (បិទជាបណ្តោះអាសន្ន)</p>` : `<p class="text-blue-600 cursor-pointer text-lg hover:underline" onclick="toggleAuthMode()">ចូលប្រើប្រាស់គណនេយ្យដែលមានស្រាប់</p>`}
+                        </div>
                     </div>
                 </div>`;
             document.getElementById('auth-form').addEventListener('submit', handleAuth);
@@ -737,4 +750,3 @@
     </script>
 </body>
 </html>
-
