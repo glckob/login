@@ -32,19 +32,46 @@
         .modal-visible { opacity: 1; pointer-events: auto; }
 
         /* Toggle Switch */
-        .toggle-checkbox:checked {
-            right: 0;
-            border-color: #2563eb;
+        .toggle-checkbox:checked { right: 0; border-color: #2563eb; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #2563eb; }
+
+        /* PRINT STYLES */
+        @media print {
+            @page { margin: 0.5cm; }
+            body { background: white; }
+            #app, #custom-modal { display: none !important; }
+            #print-container { display: block !important; width: 100%; }
+            
+            /* Reset Tailwind defaults for printing */
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ddd; padding: 4px; text-align: left; }
+            th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
+            
+            /* Paper Sizes Logic */
+            .print-A4 { font-size: 12px; }
+            .print-A4 th, .print-A4 td { padding: 8px; }
+            
+            .print-A5 { font-size: 10px; }
+            .print-A5 th, .print-A5 td { padding: 5px; }
+            .print-A5 h1 { font-size: 16px; }
+            .print-A5 .summary-box { padding: 8px; }
+
+            .print-A6 { font-size: 8px; }
+            .print-A6 th, .print-A6 td { padding: 3px; }
+            .print-A6 h1 { font-size: 14px; }
+            .print-A6 .summary-box { padding: 5px; border: 1px solid #eee; }
+            .print-A6 .hide-on-small { display: none; } /* Hide less important columns on A6 */
         }
-        .toggle-checkbox:checked + .toggle-label {
-            background-color: #2563eb;
-        }
+        #print-container { display: none; } /* Hidden on screen */
     </style>
 </head>
 <body>
 
     <!-- App Container -->
     <div id="app" class="min-h-screen flex flex-col"></div>
+
+    <!-- Print Container (Only visible when printing) -->
+    <div id="print-container"></div>
 
     <!-- Custom Modal/Dialog Component -->
     <div id="custom-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center modal-hidden p-4">
@@ -83,7 +110,8 @@
             editingSetting: null,
             filterUser: '',
             filterMonth: new Date().toISOString().slice(0, 7),
-            allowReportActions: true // NEW: Controls Edit/Delete visibility
+            allowReportActions: true,
+            printSize: 'A4' // NEW: Default print size
         };
 
         // --- CUSTOM DIALOG SYSTEM ---
@@ -197,13 +225,12 @@
         async function fetchCurrencies() { const { data } = await supabase.from('currencies').select('*').order('code'); state.currencies = data || []; }
         async function fetchPosts() { const { data } = await supabase.from('posts').select('*').order('created_at', { ascending: false }); state.posts = data || []; }
         
-        // NEW: Fetch App Settings
         async function fetchAppSettings() {
             const { data, error } = await supabase.from('app_settings').select('*').eq('key', 'allow_report_actions').single();
             if (data) {
                 state.allowReportActions = data.value === 'true';
             } else {
-                state.allowReportActions = true; // Default
+                state.allowReportActions = true;
             }
         }
 
@@ -212,7 +239,6 @@
             const { data } = await supabase.from('profiles').select('*').order('email'); 
             state.users = data || []; 
             
-            // FIX: Refresh Settings content if we are on settings page
             if (state.activeTab === 'settings') {
                 renderSettingsContent();
             }
@@ -277,6 +303,115 @@
         }
 
         async function handleLogout() { await supabase.auth.signOut(); }
+
+        // --- PRINT FUNCTIONALITY ---
+        function setPrintSize(size) {
+            state.printSize = size;
+        }
+
+        function handlePrint() {
+            const printContainer = document.getElementById('print-container');
+            
+            // Filter Data for Report
+            let reportData = state.transactions;
+            let filterTitle = "របាយការណ៍ដកប្រាក់";
+            let userDisplay = "";
+
+            // Determine User Name Display
+            if (state.role === 'admin') {
+                if (state.filterUser) {
+                    reportData = reportData.filter(t => t.user_email === state.filterUser);
+                    userDisplay = state.filterUser.split('@')[0];
+                } else {
+                    userDisplay = "អ្នកប្រើប្រាស់ទាំងអស់ (All Users)";
+                }
+            } else {
+                // Normal User: Always show their own name
+                userDisplay = state.session.user.email.split('@')[0];
+            }
+
+            // Month Filter
+            if (state.filterMonth) {
+                reportData = reportData.filter(t => t.created_at.startsWith(state.filterMonth));
+                const [year, month] = state.filterMonth.split('-');
+                filterTitle += ` - ខែ ${month}/${year}`;
+            }
+
+            // Calculations
+            const totalCount = reportData.length;
+            const totalsByCurrency = reportData.reduce((acc, curr) => {
+                const currCode = curr.currency || 'USD';
+                acc[currCode] = (acc[currCode] || 0) + curr.amount;
+                return acc;
+            }, {});
+            
+            const totalAmountStr = Object.entries(totalsByCurrency)
+                .map(([curr, amt]) => `<span style="margin-right: 15px;">${amt.toFixed(2)} ${curr}</span>`)
+                .join('');
+
+            // Generate HTML
+            const dateStr = new Date().toLocaleDateString('km-KH');
+            const isA6 = state.printSize === 'A6';
+
+            const tableRows = reportData.map((tx, index) => `
+                <tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td>${new Date(tx.created_at).toLocaleDateString('km-KH')}</td>
+                    <td class="font-bold">${tx.invoice_number}</td>
+                    <td class="text-right font-bold">${tx.amount.toFixed(2)} <small>${tx.currency||''}</small></td>
+                    <td>${tx.bank_name || '-'}</td>
+                    ${!isA6 ? `<td>${tx.account_name || '-'}</td>` : ''}
+                    ${!isA6 ? `<td>${tx.user_email.split('@')[0]}</td>` : ''}
+                </tr>
+            `).join('');
+
+            const content = `
+                <div class="print-${state.printSize} font-sans">
+                    <div style="text-align: center; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 10px;">
+                        <h1 style="font-weight: bold; margin: 0;">MONEY TRANSFER</h1>
+                        <h2 style="font-weight: normal; margin: 5px 0;">${filterTitle}</h2>
+                        <!-- Added User Name Here -->
+                        <h3 style="font-weight: bold; margin: 5px 0; font-size: 1.1em;">ឈ្មោះគណនេយ្យ: ${userDisplay}</h3>
+                        <p style="font-size: 0.8em; color: #555;">កាលបរិច្ឆេទបោះពុម្ព: ${dateStr}</p>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px; border: 1px solid #ddd; padding: 10px;" class="summary-box">
+                        <div>
+                            <strong>ចំនួនវិក្កយបត្រ:</strong> ${totalCount}
+                        </div>
+                        <div>
+                            <strong>ទឹកប្រាក់សរុប:</strong> ${totalAmountStr || '0.00'}
+                        </div>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 30px;" class="text-center">ល.រ</th>
+                                <th>កាលបរិច្ឆេទ</th>
+                                <th>វិក្កយបត្រ</th>
+                                <th class="text-right">ទឹកប្រាក់</th>
+                                <th>ធនាគារ</th>
+                                ${!isA6 ? '<th>ឈ្មោះ</th>' : ''}
+                                ${!isA6 ? '<th>User</th>' : ''}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows || '<tr><td colspan="7" style="text-align:center;">គ្មានទិន្នន័យ</td></tr>'}
+                        </tbody>
+                    </table>
+                    
+                    <div style="margin-top: 20px; text-align: right; font-size: 0.8em;">
+                        <p>ហត្ថលេខាអ្នកកាន់បញ្ជី</p>
+                        <br><br>
+                        <p>.......................................</p>
+                    </div>
+                </div>
+            `;
+
+            printContainer.innerHTML = content;
+            window.print();
+        }
 
         // --- CRUD ACTIONS ---
 
@@ -556,19 +691,15 @@
             });
         }
 
-        // NEW: Toggle Report Actions (Edit/Delete)
         async function toggleReportActions() {
             const newValue = !state.allowReportActions;
-            // Update UI immediately for responsiveness
             state.allowReportActions = newValue;
             renderSettingsContent();
 
-            // Update Database (Upsert: Update if exists, Insert if not)
             const { error } = await supabase.from('app_settings').upsert({ key: 'allow_report_actions', value: String(newValue) });
             
             if(error) {
                 showAlert('បរាជ័យ', 'មិនអាចរក្សាទុកការកំណត់បានទេ: ' + error.message);
-                // Revert state if failed
                 state.allowReportActions = !newValue;
                 renderSettingsContent();
             }
@@ -854,7 +985,17 @@
                         <div class="mb-6 space-y-4">
                             <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                                 ${filterHtml}
-                                <input type="month" onchange="setFilterMonth(this.value)" value="${state.filterMonth}" class="w-full sm:w-auto p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                                <div class="flex items-center gap-2 w-full sm:w-auto">
+                                    <input type="month" onchange="setFilterMonth(this.value)" value="${state.filterMonth}" class="flex-1 w-full sm:w-auto p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                                    <button onclick="handlePrint()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg border border-gray-300 shadow-sm transition" title="Print">
+                                        <i data-lucide="printer" class="w-5 h-5"></i>
+                                    </button>
+                                    <select onchange="setPrintSize(this.value)" class="p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm w-20">
+                                        <option value="A4" ${state.printSize === 'A4' ? 'selected' : ''}>A4</option>
+                                        <option value="A5" ${state.printSize === 'A5' ? 'selected' : ''}>A5</option>
+                                        <option value="A6" ${state.printSize === 'A6' ? 'selected' : ''}>A6</option>
+                                    </select>
+                                </div>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
@@ -934,6 +1075,7 @@
             }
         }
 
+        // ... (Keep existing renderSettingsContent) ...
         function renderSettingsContent() {
             const container = document.getElementById('main-content');
             
@@ -1034,7 +1176,7 @@
                     </div>
                 </div>`;
 
-            // NEW: Report Actions Toggle Section
+            // Report Actions Toggle Section
             const reportActionToggle = `
                 <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
                     <h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">ការកំណត់ប្រព័ន្ធ (System Config)</h3>
@@ -1074,6 +1216,7 @@
             const tbody = document.getElementById('transaction-table-body');
             if(!tbody) return;
             
+            // FILTER FOR TABLE VIEW
             let displayData = state.transactions;
             
             if (state.activeTab === 'withdraw_reports') {
