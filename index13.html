@@ -42,12 +42,10 @@
             #app, #custom-modal { display: none !important; }
             #print-container { display: block !important; width: 100%; }
             
-            /* Reset Tailwind defaults for printing */
             table { width: 100%; border-collapse: collapse; }
             th, td { border: 1px solid #ddd; padding: 4px; text-align: left; }
             th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
             
-            /* Paper Sizes Logic */
             .print-A4 { font-size: 12px; }
             .print-A4 th, .print-A4 td { padding: 8px; }
             
@@ -60,9 +58,9 @@
             .print-A6 th, .print-A6 td { padding: 3px; }
             .print-A6 h1 { font-size: 14px; }
             .print-A6 .summary-box { padding: 5px; border: 1px solid #eee; }
-            .print-A6 .hide-on-small { display: none; } /* Hide less important columns on A6 */
+            .print-A6 .hide-on-small { display: none; }
         }
-        #print-container { display: none; } /* Hidden on screen */
+        #print-container { display: none; }
     </style>
 </head>
 <body>
@@ -70,7 +68,7 @@
     <!-- App Container -->
     <div id="app" class="min-h-screen flex flex-col"></div>
 
-    <!-- Print Container (Only visible when printing) -->
+    <!-- Print Container -->
     <div id="print-container"></div>
 
     <!-- Custom Modal/Dialog Component -->
@@ -111,7 +109,7 @@
             filterUser: '',
             filterMonth: new Date().toISOString().slice(0, 7),
             allowReportActions: true,
-            printSize: 'A4' // NEW: Default print size
+            printSize: 'A4'
         };
 
         // --- CUSTOM DIALOG SYSTEM ---
@@ -140,7 +138,6 @@
                 if (isConfirm) {
                     newCancelBtn.style.display = 'block';
                     newCancelBtn.onclick = handleClose;
-                    
                     newConfirmBtn.innerText = 'យល់ព្រម';
                     newConfirmBtn.className = "w-full sm:w-auto px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-bold shadow-lg shadow-red-200";
                     newConfirmBtn.onclick = () => {
@@ -153,13 +150,11 @@
                     newConfirmBtn.className = "w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold shadow-lg shadow-blue-200";
                     newConfirmBtn.onclick = handleClose;
                 }
-
                 modal.classList.replace('modal-hidden', 'modal-visible');
             }
         };
         const showAlert = (title, msg, onClose) => dialog.show(title, msg, false, null, onClose);
         const showConfirm = (title, msg, callback, onClose) => dialog.show(title, msg, true, callback, onClose);
-
 
         // --- INITIALIZATION ---
         async function initApp() {
@@ -175,14 +170,8 @@
             }
 
             supabase.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'TOKEN_REFRESHED') {
-                    state.session = session;
-                    return;
-                }
-                if (event === 'SIGNED_IN' && state.session?.user?.id === session?.user?.id && state.role) {
-                    state.session = session;
-                    return;
-                }
+                if (event === 'TOKEN_REFRESHED') { state.session = session; return; }
+                if (event === 'SIGNED_IN' && state.session?.user?.id === session?.user?.id && state.role) { state.session = session; return; }
 
                 state.session = session;
                 if (session) {
@@ -201,13 +190,8 @@
             try {
                 const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
                 state.role = data ? data.role : 'user';
-                
-                if (state.role !== 'admin') {
-                    state.activeTab = 'quick_withdraw';
-                } else {
-                    state.activeTab = 'deposit'; 
-                }
-
+                if (state.role !== 'admin') state.activeTab = 'quick_withdraw';
+                else state.activeTab = 'deposit'; 
             } catch (error) {
                 console.error('Error fetching role:', error);
                 state.role = 'user';
@@ -220,36 +204,26 @@
             }
         }
 
-        // --- FETCH DATA ---
         async function fetchBanks() { const { data } = await supabase.from('banks').select('*').order('name'); state.banks = data || []; }
         async function fetchCurrencies() { const { data } = await supabase.from('currencies').select('*').order('code'); state.currencies = data || []; }
         async function fetchPosts() { const { data } = await supabase.from('posts').select('*').order('created_at', { ascending: false }); state.posts = data || []; }
         
         async function fetchAppSettings() {
-            const { data, error } = await supabase.from('app_settings').select('*').eq('key', 'allow_report_actions').single();
-            if (data) {
-                state.allowReportActions = data.value === 'true';
-            } else {
-                state.allowReportActions = true;
-            }
+            const { data } = await supabase.from('app_settings').select('*').eq('key', 'allow_report_actions').single();
+            state.allowReportActions = data ? (data.value === 'true') : true;
         }
 
         async function fetchUsers() { 
             if(state.role !== 'admin') return;
             const { data } = await supabase.from('profiles').select('*').order('email'); 
             state.users = data || []; 
-            
-            if (state.activeTab === 'settings') {
-                renderSettingsContent();
-            }
+            if (state.activeTab === 'settings') renderSettingsContent();
         }
 
         async function fetchTransactions() {
             if (state.activeTab === 'settings' || state.activeTab === 'quick_withdraw') return;
-            
             const currentTab = state.activeTab;
             const tableBody = document.getElementById('transaction-table-body');
-            
             if (currentTab !== 'withdraw_reports' && tableBody) {
                 tableBody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-gray-500">កំពុងទាញទិន្នន័យ...</td></tr>';
             }
@@ -264,25 +238,19 @@
 
             if (!error) {
                 state.transactions = data;
-                if (currentTab === 'withdraw_reports') {
-                    renderDashboardContent();
-                } else {
-                    renderTransactionTable();
-                }
-            } else {
-                if(tableBody) tableBody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-500">មានបញ្ហា: ${error.message}</td></tr>`;
+                if (currentTab === 'withdraw_reports') renderDashboardContent();
+                else renderTransactionTable();
+            } else if(tableBody) {
+                tableBody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-red-500">មានបញ្ហា: ${error.message}</td></tr>`;
             }
         }
 
-        // --- ACTIONS ---
         async function handleAuth(e) {
             e.preventDefault();
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const btn = document.getElementById('auth-btn');
-            
-            btn.disabled = true;
-            btn.innerText = 'កំពុងដំណើរការ...';
+            btn.disabled = true; btn.innerText = 'កំពុងដំណើរការ...';
 
             try {
                 let result;
@@ -302,22 +270,22 @@
             }
         }
 
-        async function handleLogout() { await supabase.auth.signOut(); }
+        async function handleLogout() { 
+            const { error } = await supabase.auth.signOut();
+            state.session = null; state.role = null; renderAuth();
+        }
 
-        // --- PRINT FUNCTIONALITY ---
-        function setPrintSize(size) {
+        // --- PRINT FUNCTIONALITY (FIXED) ---
+        window.setPrintSize = (size) => {
             state.printSize = size;
         }
 
-        function handlePrint() {
+        window.handlePrint = () => {
             const printContainer = document.getElementById('print-container');
-            
-            // Filter Data for Report
             let reportData = state.transactions;
             let filterTitle = "របាយការណ៍ដកប្រាក់";
             let userDisplay = "";
 
-            // Determine User Name Display
             if (state.role === 'admin') {
                 if (state.filterUser) {
                     reportData = reportData.filter(t => t.user_email === state.filterUser);
@@ -326,18 +294,15 @@
                     userDisplay = "អ្នកប្រើប្រាស់ទាំងអស់ (All Users)";
                 }
             } else {
-                // Normal User: Always show their own name
                 userDisplay = state.session.user.email.split('@')[0];
             }
 
-            // Month Filter
             if (state.filterMonth) {
                 reportData = reportData.filter(t => t.created_at.startsWith(state.filterMonth));
                 const [year, month] = state.filterMonth.split('-');
                 filterTitle += ` - ខែ ${month}/${year}`;
             }
 
-            // Calculations
             const totalCount = reportData.length;
             const totalsByCurrency = reportData.reduce((acc, curr) => {
                 const currCode = curr.currency || 'USD';
@@ -349,41 +314,37 @@
                 .map(([curr, amt]) => `<span style="margin-right: 15px;">${amt.toFixed(2)} ${curr}</span>`)
                 .join('');
 
-            // Generate HTML
             const dateStr = new Date().toLocaleDateString('km-KH');
             const isA6 = state.printSize === 'A6';
 
-            const tableRows = reportData.map((tx, index) => `
+            const tableRows = reportData.map((tx, index) => {
+                const txDate = new Date(tx.created_at);
+                const dateDisplay = txDate.toLocaleDateString('km-KH');
+                const timeDisplay = txDate.toLocaleTimeString('km-KH', {hour: '2-digit', minute:'2-digit'});
+                return `
                 <tr>
                     <td class="text-center">${index + 1}</td>
-                    <td>${new Date(tx.created_at).toLocaleDateString('km-KH')}</td>
+                    <td>${dateDisplay} <small>${timeDisplay}</small></td>
                     <td class="font-bold">${tx.invoice_number}</td>
                     <td class="text-right font-bold">${tx.amount.toFixed(2)} <small>${tx.currency||''}</small></td>
                     <td>${tx.bank_name || '-'}</td>
                     ${!isA6 ? `<td>${tx.account_name || '-'}</td>` : ''}
                     ${!isA6 ? `<td>${tx.user_email.split('@')[0]}</td>` : ''}
                 </tr>
-            `).join('');
+            `}).join('');
 
             const content = `
                 <div class="print-${state.printSize} font-sans">
                     <div style="text-align: center; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 10px;">
                         <h1 style="font-weight: bold; margin: 0;">MONEY TRANSFER</h1>
                         <h2 style="font-weight: normal; margin: 5px 0;">${filterTitle}</h2>
-                        <!-- Added User Name Here -->
                         <h3 style="font-weight: bold; margin: 5px 0; font-size: 1.1em;">ឈ្មោះគណនេយ្យ: ${userDisplay}</h3>
                         <p style="font-size: 0.8em; color: #555;">កាលបរិច្ឆេទបោះពុម្ព: ${dateStr}</p>
                     </div>
-
                     <div style="display: flex; justify-content: space-between; margin-bottom: 15px; border: 1px solid #ddd; padding: 10px;" class="summary-box">
-                        <div>
-                            <strong>ចំនួនវិក្កយបត្រ:</strong> ${totalCount}
-                        </div>
-                        <div>
-                            <strong>ទឹកប្រាក់សរុប:</strong> ${totalAmountStr || '0.00'}
-                        </div>
+                        <div><strong>ចំនួនវិក្កយបត្រ:</strong> ${totalCount}</div>
+                        <div><strong>ទឹកប្រាក់សរុប:</strong> ${totalAmountStr || '0.00'}</div>
                     </div>
-
                     <table>
                         <thead>
                             <tr>
@@ -396,65 +357,39 @@
                                 ${!isA6 ? '<th>User</th>' : ''}
                             </tr>
                         </thead>
-                        <tbody>
-                            ${tableRows || '<tr><td colspan="7" style="text-align:center;">គ្មានទិន្នន័យ</td></tr>'}
-                        </tbody>
+                        <tbody>${tableRows || '<tr><td colspan="7" style="text-align:center;">គ្មានទិន្នន័យ</td></tr>'}</tbody>
                     </table>
-                    
                     <div style="margin-top: 20px; text-align: right; font-size: 0.8em;">
-                        <p>ហត្ថលេខាអ្នកកាន់បញ្ជី</p>
-                        <br><br>
-                        <p>.......................................</p>
+                        <p>ហត្ថលេខាអ្នកកាន់បញ្ជី</p><br><br><p>.......................................</p>
                     </div>
                 </div>
             `;
-
             printContainer.innerHTML = content;
             window.print();
         }
 
-        // --- CRUD ACTIONS ---
-
         window.editTransaction = (txId) => {
             const tx = state.transactions.find(t => t.id === txId);
-            if(tx) {
-                state.editingTx = tx;
-                state.showForm = true;
-                renderDashboardContent();
-            }
+            if(tx) { state.editingTx = tx; state.showForm = true; renderDashboardContent(); }
         };
 
         window.deleteTransaction = (txId) => {
-            showConfirm('លុបទិន្នន័យ', 'តើអ្នកពិតជាចង់លុបទិន្នន័យនេះមែនទេ? សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ។', async () => {
+            showConfirm('លុបទិន្នន័យ', 'តើអ្នកពិតជាចង់លុបទិន្នន័យនេះមែនទេ?', async () => {
                 const { error } = await supabase.from('transactions').delete().eq('id', txId);
-                if(error) {
-                    showAlert('បរាជ័យ', 'មិនអាចលុបបានទេ: ' + error.message);
-                } else {
-                    showAlert('ជោគជ័យ', 'លុបទិន្នន័យជោគជ័យ');
-                    fetchTransactions();
-                }
+                if(error) showAlert('បរាជ័យ', 'មិនអាចលុបបានទេ: ' + error.message);
+                else { showAlert('ជោគជ័យ', 'លុបទិន្នន័យជោគជ័យ'); fetchTransactions(); }
             });
         };
 
         function focusInput(id) {
             setTimeout(() => {
                 const el = document.getElementById(id);
-                if (el) {
-                    el.focus();
-                    if(el.select) el.select();
-                }
+                if (el) { el.focus(); if(el.select) el.select(); }
             }, 100);
         }
 
-        window.setFilterUser = (email) => {
-            state.filterUser = email;
-            renderDashboardContent();
-        }
-
-        window.setFilterMonth = (month) => {
-            state.filterMonth = month;
-            renderDashboardContent();
-        }
+        window.setFilterUser = (email) => { state.filterUser = email; renderDashboardContent(); }
+        window.setFilterMonth = (month) => { state.filterMonth = month; renderDashboardContent(); }
 
         async function handleTransactionSubmit(e) {
             e.preventDefault();
@@ -466,30 +401,18 @@
 
             if (isQuickWithdraw && !isEditing) {
                 const invoiceNumber = document.getElementById('withdraw_invoice').value.trim();
-                
-                if (!invoiceNumber) {
-                    showAlert('ជូនដំណឹង', 'សូមបញ្ចូលលេខវិក្កយបត្រ', () => focusInput('withdraw_invoice'));
-                    btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
-                    return;
-                }
+                if (!invoiceNumber) { showAlert('ជូនដំណឹង', 'សូមបញ្ចូលលេខវិក្កយបត្រ', () => focusInput('withdraw_invoice')); btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់'; return; }
 
                 const { data: depositRecord, error: searchError } = await supabase
-                    .from('transactions')
-                    .select('*')
-                    .eq('transaction_type', 'deposit')
-                    .eq('invoice_number', invoiceNumber)
-                    .eq('status', 'pending')
-                    .single();
+                    .from('transactions').select('*').eq('transaction_type', 'deposit').eq('invoice_number', invoiceNumber).eq('status', 'pending').single();
 
                 if (searchError || !depositRecord) {
                     showAlert('បរាជ័យ', 'រកមិនឃើញវិក្កយបត្រនេះទេ (INV: ' + invoiceNumber + ') ឬទឹកប្រាក់ត្រូវបានដករួចរាល់ហើយ។', () => focusInput('withdraw_invoice'));
-                    btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
-                    document.getElementById('withdraw_invoice').value = '';
+                    btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់'; document.getElementById('withdraw_invoice').value = '';
                     return;
                 }
 
                 const confirmMsg = `រកឃើញវិក្កយបត្រ: ${depositRecord.invoice_number}\nទឹកប្រាក់: $${depositRecord.amount} ${depositRecord.currency || ''}\nឈ្មោះ: ${depositRecord.account_name}\n\nតើអ្នកចង់ធ្វើការដកប្រាក់នេះមែនទេ?`;
-                
                 showConfirm('បញ្ជាក់ការដកប្រាក់', confirmMsg, async () => {
                     const { error: insertError } = await supabase.from('transactions').insert([{
                         transaction_type: 'withdraw',
@@ -503,28 +426,21 @@
                     }]);
 
                     if (insertError) {
-                        showAlert('បរាជ័យ', 'បរាជ័យក្នុងការបង្កើតទិន្នន័យដកប្រាក់: ' + insertError.message, () => focusInput('withdraw_invoice'));
-                        btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
-                        return;
+                        showAlert('បរាជ័យ', insertError.message, () => focusInput('withdraw_invoice'));
+                        btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់'; return;
                     }
 
                     const { data: updatedData, error: updateError } = await supabase
-                        .from('transactions')
-                        .update({ status: 'completed', withdrawn_by: state.session.user.email })
-                        .eq('id', depositRecord.id)
-                        .select();
+                        .from('transactions').update({ status: 'completed', withdrawn_by: state.session.user.email }).eq('id', depositRecord.id).select();
 
-                    if (updateError) {
-                        showAlert('ព្រមាន', 'Error updating deposit status: ' + updateError.message, () => focusInput('withdraw_invoice'));
-                    } else if (updatedData && updatedData.length === 0) {
-                        showAlert('បញ្ហាសិទ្ធិ', 'ប្រព័ន្ធមិនអាចកែប្រែស្ថានភាពវេរចូលចាស់បានទេ។', () => focusInput('withdraw_invoice'));
-                    } else {
+                    if (updateError) showAlert('ព្រមាន', updateError.message, () => focusInput('withdraw_invoice'));
+                    else if (updatedData && updatedData.length === 0) showAlert('បញ្ហាសិទ្ធិ', 'ប្រព័ន្ធមិនអាចកែប្រែស្ថានភាពវេរចូលចាស់បានទេ។', () => focusInput('withdraw_invoice'));
+                    else {
                         showAlert('ជោគជ័យ', 'ដកប្រាក់ជោគជ័យ!', () => focusInput('withdraw_invoice'));
                         document.getElementById('withdraw_invoice').value = '';
                     }
                     btn.disabled = false; btn.innerText = 'ទូទាត់ដកប្រាក់';
-                }, () => focusInput('withdraw_invoice')); 
-                
+                }, () => focusInput('withdraw_invoice'));
                 return;
             }
 
@@ -536,116 +452,58 @@
             const status = document.getElementById('status_select').value;
             const currency = document.getElementById('currency_select').value;
 
-            if (!invoiceNumber) {
-                showAlert('ជូនដំណឹង', 'សូមបញ្ចូលលេខវិក្កយបត្រ', () => focusInput('invoice_number'));
-                btn.disabled = false; btn.innerText = isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក';
-                return;
-            }
+            if (!invoiceNumber) { showAlert('ជូនដំណឹង', 'សូមបញ្ចូលលេខវិក្កយបត្រ', () => focusInput('invoice_number')); btn.disabled = false; btn.innerText = isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក'; return; }
 
             if (!isEditing || (isEditing && invoiceNumber !== state.editingTx.invoice_number)) {
-                const { data: existing } = await supabase
-                    .from('transactions')
-                    .select('id')
-                    .eq('transaction_type', 'deposit') 
-                    .eq('invoice_number', invoiceNumber)
-                    .maybeSingle();
-
-                if (existing) {
-                    if (!isEditing || existing.id !== state.editingTx.id) {
-                        showAlert('បរាជ័យ', 'លេខវិក្កយបត្រនេះមាននៅក្នុងប្រព័ន្ធរួចហើយ!', () => focusInput('invoice_number'));
-                        btn.disabled = false; btn.innerText = isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក';
-                        return;
-                    }
+                const { data: existing } = await supabase.from('transactions').select('id').eq('transaction_type', 'deposit').eq('invoice_number', invoiceNumber).maybeSingle();
+                if (existing && (!isEditing || existing.id !== state.editingTx.id)) {
+                    showAlert('បរាជ័យ', 'លេខវិក្កយបត្រនេះមាននៅក្នុងប្រព័ន្ធរួចហើយ!', () => focusInput('invoice_number'));
+                    btn.disabled = false; btn.innerText = isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក'; return;
                 }
             }
 
-            const formData = {
-                invoice_number: invoiceNumber,
-                amount: amount,
-                account_name: accountName,
-                bank_name: bankName,
-                currency: currency,
-                status: status,
-            };
+            const formData = { invoice_number: invoiceNumber, amount: amount, account_name: accountName, bank_name: bankName, currency: currency, status: status };
 
             if (!isEditing) {
-                formData.transaction_type = 'deposit'; 
-                formData.user_email = state.session.user.email;
-                
+                formData.transaction_type = 'deposit'; formData.user_email = state.session.user.email;
                 const { error } = await supabase.from('transactions').insert([formData]);
-                if (error) {
-                    showAlert('បរាជ័យ', error.message, () => focusInput('invoice_number'));
-                } else {
-                    state.showForm = false;
-                    renderDashboardContent();
-                    fetchTransactions();
+                if (error) showAlert('បរាជ័យ', error.message, () => focusInput('invoice_number'));
+                else {
+                    state.showForm = false; renderDashboardContent(); fetchTransactions();
                     showAlert('ជោគជ័យ', 'រក្សាទុកជោគជ័យ!');
                 }
             } else {
                 const { error } = await supabase.from('transactions').update(formData).eq('id', state.editingTx.id);
-                if (error) showAlert('បរាជ័យ', 'កែប្រែមិនបានសម្រេច: ' + error.message, () => focusInput('invoice_number'));
+                if (error) showAlert('បរាជ័យ', error.message, () => focusInput('invoice_number'));
                 else {
                     showAlert('ជោគជ័យ', 'កែប្រែទិន្នន័យជោគជ័យ!');
-                    state.editingTx = null;
-                    state.showForm = false;
-                    renderDashboardContent();
-                    fetchTransactions();
+                    state.editingTx = null; state.showForm = false; renderDashboardContent(); fetchTransactions();
                 }
             }
             btn.disabled = false;
         }
 
         window.prepareEditSetting = (table, id) => {
-            let item;
-            if(table === 'banks') item = state.banks.find(i => i.id === id);
-            else if(table === 'currencies') item = state.currencies.find(i => i.id === id);
-            else if(table === 'posts') item = state.posts.find(i => i.id === id);
-
-            if(item) {
-                state.editingSetting = { table, ...item };
-                renderSettingsContent();
-            }
+            let item = (table === 'banks' ? state.banks : (table === 'currencies' ? state.currencies : state.posts)).find(i => i.id === id);
+            if(item) { state.editingSetting = { table, ...item }; renderSettingsContent(); }
         };
 
-        window.cancelEditSetting = () => {
-            state.editingSetting = null;
-            renderSettingsContent();
-        }
+        window.cancelEditSetting = () => { state.editingSetting = null; renderSettingsContent(); }
 
         async function saveSetting(table, inputId) {
-            const input = document.getElementById(inputId);
-            const value = input.value.trim();
+            const value = document.getElementById(inputId).value.trim();
             if(!value) return;
-
             const isEditing = state.editingSetting && state.editingSetting.table === table;
-            
             let payload = {};
             if(table === 'currencies') payload.code = value;
-            else if(table === 'posts') {
-                payload.title = value; 
-                if(document.getElementById('post-content')) payload.content = document.getElementById('post-content').value;
-            }
+            else if(table === 'posts') { payload.title = value; if(document.getElementById('post-content')) payload.content = document.getElementById('post-content').value; }
             else payload.name = value;
 
-            let error;
-            if(isEditing) {
-                const { error: err } = await supabase.from(table).update(payload).eq('id', state.editingSetting.id);
-                error = err;
-            } else {
-                const { error: err } = await supabase.from(table).insert([payload]);
-                error = err;
-            }
-
+            const { error } = isEditing ? await supabase.from(table).update(payload).eq('id', state.editingSetting.id) : await supabase.from(table).insert([payload]);
             if(error) showAlert('បរាជ័យ', error.message);
             else {
-                if(inputId) document.getElementById(inputId).value = '';
-                if(document.getElementById('post-content')) document.getElementById('post-content').value = '';
-                state.editingSetting = null;
-                
-                if(table === 'banks') await fetchBanks();
-                if(table === 'currencies') await fetchCurrencies();
-                if(table === 'posts') await fetchPosts();
-                
+                document.getElementById(inputId).value = ''; state.editingSetting = null;
+                if(table === 'banks') await fetchBanks(); if(table === 'currencies') await fetchCurrencies(); if(table === 'posts') await fetchPosts();
                 renderSettingsContent();
             }
         }
@@ -655,84 +513,47 @@
                 const { error } = await supabase.from(table).delete().eq('id', id);
                 if(error) showAlert('បរាជ័យ', error.message);
                 else {
-                    if(table === 'banks') await fetchBanks();
-                    if(table === 'posts') await fetchPosts();
-                    if(table === 'currencies') await fetchCurrencies();
+                    if(table === 'banks') await fetchBanks(); if(table === 'posts') await fetchPosts(); if(table === 'currencies') await fetchCurrencies();
                     renderSettingsContent();
                 }
             });
         }
 
         async function setDefault(table, id) {
-            const rpcName = table === 'banks' ? 'set_default_bank' : 'set_default_currency';
-            const { error } = await supabase.rpc(rpcName, { row_id: id });
-            
-            if(error) {
-                console.error("RPC Error:", error);
-                showAlert('បរាជ័យ', 'មិនអាចកំណត់លំនាំដើមបានទេ: ' + error.message);
-            } else {
-                if(table === 'banks') await fetchBanks();
-                if(table === 'currencies') await fetchCurrencies();
-                renderSettingsContent();
-            }
+            const { error } = await supabase.rpc(table === 'banks' ? 'set_default_bank' : 'set_default_currency', { row_id: id });
+            if(error) showAlert('បរាជ័យ', 'មិនអាចកំណត់លំនាំដើមបានទេ: ' + error.message);
+            else { if(table === 'banks') await fetchBanks(); else await fetchCurrencies(); renderSettingsContent(); }
         }
 
         async function updateUserRole(userId, newRole) {
             const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
-            if(error) showAlert('បរាជ័យ', error.message);
-            else fetchUsers();
+            if(error) showAlert('បរាជ័យ', error.message); else fetchUsers();
         }
 
         async function deleteUser(userId) {
-            showConfirm('បញ្ជាក់', 'ការលុបនេះនឹងដកសិទ្ធិប្រើប្រាស់របស់ User នេះ។ តើអ្នកច្បាស់ទេ?', async () => {
+            showConfirm('បញ្ជាក់', 'លុប User នេះ?', async () => {
                 const { error } = await supabase.from('profiles').delete().eq('id', userId);
-                if(error) showAlert('បរាជ័យ', error.message);
-                else fetchUsers();
+                if(error) showAlert('បរាជ័យ', error.message); else fetchUsers();
             });
         }
 
         async function toggleReportActions() {
             const newValue = !state.allowReportActions;
-            state.allowReportActions = newValue;
-            renderSettingsContent();
-
-            const { error } = await supabase.from('app_settings').upsert({ key: 'allow_report_actions', value: String(newValue) });
-            
-            if(error) {
-                showAlert('បរាជ័យ', 'មិនអាចរក្សាទុកការកំណត់បានទេ: ' + error.message);
-                state.allowReportActions = !newValue;
-                renderSettingsContent();
-            }
+            // state.allowReportActions = newValue; renderSettingsContent(); // Disabled for now as per user request to just show disabled UI
         }
 
-        // --- NAVIGATION & UI ---
         function switchTab(tab) {
-            state.activeTab = tab;
-            state.showForm = false;
-            state.editingTx = null; 
-            state.filterUser = ''; 
-            renderDashboard();
-            if(tab === 'settings') fetchUsers(); 
-            else fetchTransactions();
+            state.activeTab = tab; state.showForm = false; state.editingTx = null; state.filterUser = '';
+            renderDashboard(); if(tab === 'settings') fetchUsers(); else fetchTransactions();
         }
 
         function toggleForm() { 
-            state.showForm = !state.showForm; 
-            if(!state.showForm) state.editingTx = null;
-            renderDashboardContent(); 
-            
-            if(state.showForm) {
-                setTimeout(() => {
-                    const input = document.getElementById('invoice_number');
-                    if(input) input.focus();
-                }, 100);
-            }
+            state.showForm = !state.showForm; if(!state.showForm) state.editingTx = null; renderDashboardContent(); 
+            if(state.showForm) setTimeout(() => { const i = document.getElementById('invoice_number'); if(i) i.focus(); }, 100);
         }
         function toggleAuthMode() { state.authMode = state.authMode === 'login' ? 'signup' : 'login'; renderAuth(); }
 
-        function renderLoading() {
-            document.getElementById('app').innerHTML = `<div class="flex items-center justify-center h-screen"><div class="loader"></div></div>`;
-        }
+        function renderLoading() { document.getElementById('app').innerHTML = `<div class="flex items-center justify-center h-screen"><div class="loader"></div></div>`; }
 
         function renderAuth() {
             const isLogin = state.authMode === 'login';
@@ -740,9 +561,7 @@
                 <div class="flex items-center justify-center min-h-screen bg-slate-100 p-4">
                     <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
                         <div class="text-center mb-6">
-                            <div class="inline-flex bg-blue-100 p-4 rounded-full mb-3 shadow-sm">
-                                <img src="https://cdn-icons-png.flaticon.com/512/2845/2845683.png" alt="Logo" class="w-16 h-16">
-                            </div>
+                            <div class="inline-flex bg-blue-100 p-4 rounded-full mb-3 shadow-sm"><img src="https://cdn-icons-png.flaticon.com/512/2845/2845683.png" class="w-16 h-16"></div>
                             <h1 class="text-2xl font-bold text-blue-800">ប្រព័ន្ធគ្រប់គ្រងវេរប្រាក់</h1>
                         </div>
                         <form id="auth-form" class="space-y-4">
@@ -750,9 +569,7 @@
                             <input type="password" id="password" required placeholder="Password" class="w-full p-4 border rounded-lg text-lg outline-none focus:ring-2 focus:ring-blue-500">
                             <button type="submit" id="auth-btn" class="w-full bg-blue-600 text-white p-4 rounded-lg font-bold text-lg hover:bg-blue-700 transition shadow-lg shadow-blue-200">${isLogin ? 'ចូលប្រើប្រាស់' : 'ចុះឈ្មោះ'}</button>
                         </form>
-                        <p class="text-center mt-6 text-blue-600 cursor-pointer text-lg" onclick="toggleAuthMode()">
-                            ${isLogin ? 'ចុះឈ្មោះគណនេយ្យថ្មី' : 'ចូលប្រើប្រាស់គណនេយ្យដែលមានស្រាប់'}
-                        </p>
+                        <p class="text-center mt-6 text-blue-600 cursor-pointer text-lg" onclick="toggleAuthMode()">${isLogin ? 'ចុះឈ្មោះគណនេយ្យថ្មី' : 'ចូលប្រើប្រាស់គណនេយ្យដែលមានស្រាប់'}</p>
                     </div>
                 </div>`;
             document.getElementById('auth-form').addEventListener('submit', handleAuth);
@@ -760,57 +577,32 @@
 
         function renderDashboard() {
             const isAdmin = state.role === 'admin';
-            const userEmail = state.session.user.email;
-            const userName = userEmail.split('@')[0];
+            const userName = state.session.user.email.split('@')[0];
             const avatarUrl = `https://ui-avatars.com/api/?name=${userName}&background=random&color=fff&size=128`;
 
             document.getElementById('app').innerHTML = `
                 <div class="flex flex-col h-screen bg-gray-100 font-sans">
-                    <!-- Top Header Area (Fixed) -->
                     <div class="bg-white shadow-sm z-50 sticky top-0">
                         <div class="flex justify-between items-center px-4 py-3 border-b border-gray-100">
-                            <div class="flex items-center gap-2">
-                                <img src="https://cdn-icons-png.flaticon.com/512/2845/2845683.png" alt="Logo" class="w-8 h-8">
-                                <h1 class="text-xl font-black text-blue-600 tracking-tight hidden sm:block">MoneyTransfer</h1>
-                            </div>
+                            <div class="flex items-center gap-2"><img src="https://cdn-icons-png.flaticon.com/512/2845/2845683.png" class="w-8 h-8"><h1 class="text-xl font-black text-blue-600 tracking-tight hidden sm:block">MoneyTransfer</h1></div>
                             <div class="flex items-center gap-3">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-sm font-bold text-gray-700 hidden sm:block">${userName}</span>
-                                    <img src="${avatarUrl}" alt="Profile" class="w-9 h-9 rounded-full border border-gray-200 shadow-sm">
-                                </div>
-                                <button onclick="handleLogout()" class="bg-gray-100 p-2 rounded-full hover:bg-red-50 hover:text-red-500 transition">
-                                    <i data-lucide="log-out" class="w-5 h-5 text-gray-600 hover:text-red-500"></i>
-                                </button>
+                                <div class="flex items-center gap-2"><span class="text-sm font-bold text-gray-700 hidden sm:block">${userName}</span><img src="${avatarUrl}" class="w-9 h-9 rounded-full border border-gray-200 shadow-sm"></div>
+                                <button onclick="handleLogout()" class="bg-gray-100 p-2 rounded-full hover:bg-red-50 hover:text-red-500 transition"><i data-lucide="log-out" class="w-5 h-5 text-gray-600 hover:text-red-500"></i></button>
                             </div>
                         </div>
-
-                        <!-- Navigation Tabs -->
                         <div class="flex justify-around items-center">
                             <button onclick="switchTab('quick_withdraw')" class="flex-1 py-3 flex justify-center items-center relative group">
                                 <i data-lucide="zap" class="w-7 h-7 ${state.activeTab === 'quick_withdraw' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
                                 ${state.activeTab === 'quick_withdraw' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
                             </button>
-
-                            ${isAdmin ? `
-                            <button onclick="switchTab('deposit')" class="flex-1 py-3 flex justify-center items-center relative group">
-                                <i data-lucide="arrow-down-circle" class="w-7 h-7 ${state.activeTab === 'deposit' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
-                                ${state.activeTab === 'deposit' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
-                            </button>` : ''}
-
+                            ${isAdmin ? `<button onclick="switchTab('deposit')" class="flex-1 py-3 flex justify-center items-center relative group"><i data-lucide="arrow-down-circle" class="w-7 h-7 ${state.activeTab === 'deposit' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>${state.activeTab === 'deposit' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}</button>` : ''}
                             <button onclick="switchTab('withdraw_reports')" class="flex-1 py-3 flex justify-center items-center relative group">
                                 <i data-lucide="file-text" class="w-7 h-7 ${state.activeTab === 'withdraw_reports' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
                                 ${state.activeTab === 'withdraw_reports' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
                             </button>
-
-                            ${isAdmin ? `
-                            <button onclick="switchTab('settings')" class="flex-1 py-3 flex justify-center items-center relative group">
-                                <i data-lucide="menu" class="w-7 h-7 ${state.activeTab === 'settings' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>
-                                ${state.activeTab === 'settings' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}
-                            </button>` : ''}
+                            ${isAdmin ? `<button onclick="switchTab('settings')" class="flex-1 py-3 flex justify-center items-center relative group"><i data-lucide="menu" class="w-7 h-7 ${state.activeTab === 'settings' ? 'text-blue-600' : 'text-gray-500 group-hover:bg-gray-50'}"></i>${state.activeTab === 'settings' ? '<div class="absolute bottom-0 w-full h-1 bg-blue-600 rounded-t-lg"></div>' : ''}</button>` : ''}
                         </div>
                     </div>
-
-                    <!-- Main Content -->
                     <main id="main-content" class="flex-1 overflow-y-auto bg-gray-100 p-4 pb-20"></main>
                 </div>`;
             lucide.createIcons();
@@ -819,473 +611,125 @@
 
         function renderDashboardContent() {
             const container = document.getElementById('main-content');
-            if (state.activeTab === 'settings') {
-                renderSettingsContent();
-                return;
-            }
+            if (state.activeTab === 'settings') { renderSettingsContent(); return; }
 
             const isDeposit = state.activeTab === 'deposit';
             const isWithdrawReports = state.activeTab === 'withdraw_reports';
             const isQuickWithdraw = state.activeTab === 'quick_withdraw';
             const isAdmin = state.role === 'admin';
-            
             const isEditing = !!state.editingTx;
             const editData = state.editingTx || {};
 
-            // 1. STANDARD FORM
             const standardFormHtml = `
                 <div class="bg-white p-4 md:p-8 rounded-xl shadow-sm border border-gray-100 max-w-3xl mx-auto">
-                    <h3 class="text-xl font-bold mb-6 flex gap-2 items-center text-blue-800 border-b pb-4">
-                        <i data-lucide="edit" class="w-5 h-5"></i> ${isEditing ? 'កែប្រែទិន្នន័យ' : 'បញ្ចូលទិន្នន័យវេរចូល'}
-                    </h3>
+                    <h3 class="text-xl font-bold mb-6 flex gap-2 items-center text-blue-800 border-b pb-4"><i data-lucide="edit" class="w-5 h-5"></i> ${isEditing ? 'កែប្រែទិន្នន័យ' : 'បញ្ចូលទិន្នន័យវេរចូល'}</h3>
                     <form id="transaction-form" class="flex flex-col gap-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="flex flex-col gap-2">
-                                <label class="text-sm font-bold text-gray-700">លេខវិក្កយបត្រ (Invoice)</label>
-                                <input type="text" id="invoice_number" class="w-full p-4 border rounded-lg text-lg bg-gray-50 focus:bg-white transition" placeholder="INV-001" required value="${editData.invoice_number || ''}" inputmode="text">
-                            </div>
-                            <div class="flex flex-col gap-2">
-                                <label class="text-sm font-bold text-gray-700">ចំនួនទឹកប្រាក់ ($)</label>
-                                <input type="number" id="amount" step="0.01" class="w-full p-4 border rounded-lg text-lg font-bold text-blue-600 bg-gray-50 focus:bg-white transition" required placeholder="0.00" value="${editData.amount || ''}" inputmode="decimal">
-                            </div>
+                            <div class="flex flex-col gap-2"><label class="text-sm font-bold text-gray-700">លេខវិក្កយបត្រ (Invoice)</label><input type="text" id="invoice_number" class="w-full p-4 border rounded-lg text-lg bg-gray-50 focus:bg-white transition" placeholder="INV-001" required value="${editData.invoice_number || ''}" inputmode="text"></div>
+                            <div class="flex flex-col gap-2"><label class="text-sm font-bold text-gray-700">ចំនួនទឹកប្រាក់ ($)</label><input type="number" id="amount" step="0.01" class="w-full p-4 border rounded-lg text-lg font-bold text-blue-600 bg-gray-50 focus:bg-white transition" required placeholder="0.00" value="${editData.amount || ''}" inputmode="decimal"></div>
                         </div>
-                        <div class="flex flex-col gap-2">
-                            <label class="text-sm font-bold text-gray-700">ឈ្មោះគណនេយ្យ</label>
-                            <input type="text" id="account_name" class="w-full p-4 border rounded-lg text-lg bg-gray-50 focus:bg-white transition" placeholder="ឈ្មោះអតិថិជន" value="${editData.account_name || ''}" inputmode="text">
-                        </div>
+                        <div class="flex flex-col gap-2"><label class="text-sm font-bold text-gray-700">ឈ្មោះគណនេយ្យ</label><input type="text" id="account_name" class="w-full p-4 border rounded-lg text-lg bg-gray-50 focus:bg-white transition" placeholder="ឈ្មោះអតិថិជន" value="${editData.account_name || ''}" inputmode="text"></div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="flex flex-col gap-2">
-                                <label class="text-sm font-bold text-gray-700">ធនាគារ</label>
-                                <div class="relative">
-                                    <select id="bank_name" class="w-full p-4 border rounded-lg text-lg bg-white appearance-none cursor-pointer">
-                                        <option value="">ជ្រើសរើសធនាគារ</option>
-                                        ${state.banks.map(b => `<option value="${b.id}" ${(isEditing ? (b.name === editData.bank_name) : b.is_default) ? 'selected' : ''}>${b.name}</option>`).join('')}
-                                    </select>
-                                    <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500"><i data-lucide="chevron-down"></i></div>
-                                </div>
-                            </div>
-                            <div class="flex flex-col gap-2">
-                                 <label class="text-sm font-bold text-gray-700">រូបិយប័ណ្ណ</label>
-                                 <div class="relative">
-                                     <select id="currency_select" class="w-full p-4 border rounded-lg text-lg bg-white appearance-none cursor-pointer">
-                                        ${state.currencies.map(c => `<option value="${c.code}" ${(isEditing ? (c.code === editData.currency) : c.is_default) ? 'selected' : ''}>${c.code}</option>`).join('')}
-                                    </select>
-                                    <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500"><i data-lucide="chevron-down"></i></div>
-                                </div>
-                            </div>
+                            <div class="flex flex-col gap-2"><label class="text-sm font-bold text-gray-700">ធនាគារ</label><div class="relative"><select id="bank_name" class="w-full p-4 border rounded-lg text-lg bg-white appearance-none cursor-pointer"><option value="">ជ្រើសរើសធនាគារ</option>${state.banks.map(b => `<option value="${b.id}" ${(isEditing ? (b.name === editData.bank_name) : b.is_default) ? 'selected' : ''}>${b.name}</option>`).join('')}</select><div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500"><i data-lucide="chevron-down"></i></div></div></div>
+                            <div class="flex flex-col gap-2"><label class="text-sm font-bold text-gray-700">រូបិយប័ណ្ណ</label><div class="relative"><select id="currency_select" class="w-full p-4 border rounded-lg text-lg bg-white appearance-none cursor-pointer">${state.currencies.map(c => `<option value="${c.code}" ${(isEditing ? (c.code === editData.currency) : c.is_default) ? 'selected' : ''}>${c.code}</option>`).join('')}</select><div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500"><i data-lucide="chevron-down"></i></div></div></div>
                         </div>
-                        <div class="flex flex-col gap-2">
-                            <label class="text-sm font-bold text-gray-700">ស្ថានភាព</label>
-                            <div class="relative">
-                                <select id="status_select" class="w-full p-4 border rounded-lg text-lg bg-white font-medium text-gray-700 appearance-none">
-                                    <option value="pending" ${editData.status === 'pending' ? 'selected' : ''}>មិនទាន់ដក</option>
-                                    <option value="completed" ${editData.status === 'completed' ? 'selected' : ''}>បានដក(គណនេយ្យ)</option>
-                                </select>
-                                <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500"><i data-lucide="chevron-down"></i></div>
-                            </div>
-                        </div>
-                        <div class="flex gap-3 mt-4 pt-4 border-t">
-                            <button type="button" onclick="toggleForm()" class="flex-1 py-3 bg-gray-100 text-gray-800 rounded-lg font-bold text-lg hover:bg-gray-200 transition">បោះបង់</button>
-                            <button type="submit" id="submit-tx-btn" class="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 shadow-sm transition">
-                                ${isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក'}
-                            </button>
-                        </div>
+                        <div class="flex flex-col gap-2"><label class="text-sm font-bold text-gray-700">ស្ថានភាព</label><div class="relative"><select id="status_select" class="w-full p-4 border rounded-lg text-lg bg-white font-medium text-gray-700 appearance-none"><option value="pending" ${editData.status === 'pending' ? 'selected' : ''}>មិនទាន់ដក</option><option value="completed" ${editData.status === 'completed' ? 'selected' : ''}>បានដក(គណនេយ្យ)</option></select><div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500"><i data-lucide="chevron-down"></i></div></div></div>
+                        <div class="flex gap-3 mt-4 pt-4 border-t"><button type="button" onclick="toggleForm()" class="flex-1 py-3 bg-gray-100 text-gray-800 rounded-lg font-bold text-lg hover:bg-gray-200 transition">បោះបង់</button><button type="submit" id="submit-tx-btn" class="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 shadow-sm transition">${isEditing ? 'កែប្រែទិន្នន័យ' : 'រក្សាទុក'}</button></div>
                     </form>
                 </div>`;
 
-            // 2. QUICK WITHDRAW FORM
             const quickWithdrawFormHtml = `
                 <div class="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-gray-200 max-w-xl mx-auto mt-2">
-                    <h3 class="text-xl font-bold mb-6 flex gap-2 items-center text-gray-800 border-b border-gray-100 pb-4">
-                        <i data-lucide="zap" class="w-6 h-6 text-blue-600"></i> ដកប្រាក់រហ័ស
-                    </h3>
+                    <h3 class="text-xl font-bold mb-6 flex gap-2 items-center text-gray-800 border-b border-gray-100 pb-4"><i data-lucide="zap" class="w-6 h-6 text-blue-600"></i> ដកប្រាក់រហ័ស</h3>
                     <form id="transaction-form" class="flex flex-col gap-6">
-                        <div class="flex flex-col gap-3">
-                            <label class="text-lg font-bold text-gray-700 text-center">បញ្ចូលលេខវិក្កយបត្រ (Invoice)</label>
-                            <input type="text" id="withdraw_invoice" class="w-full p-5 border-2 border-gray-300 rounded-xl text-2xl text-center font-mono focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition uppercase" placeholder="INV..." required inputmode="text">
-                        </div>
-                        <div class="flex flex-col gap-3 mt-4">
-                            <button type="submit" id="submit-tx-btn" class="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-xl hover:bg-blue-700 shadow-md transition active:scale-[0.98] flex items-center justify-center gap-2">
-                                <i data-lucide="search" class="w-5 h-5"></i> ស្វែងរក & ទូទាត់
-                            </button>
-                        </div>
+                        <div class="flex flex-col gap-3"><label class="text-lg font-bold text-gray-700 text-center">បញ្ចូលលេខវិក្កយបត្រ (Invoice)</label><input type="text" id="withdraw_invoice" class="w-full p-5 border-2 border-gray-300 rounded-xl text-2xl text-center font-mono focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition uppercase" placeholder="INV..." required inputmode="text"></div>
+                        <div class="flex flex-col gap-3 mt-4"><button type="submit" id="submit-tx-btn" class="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-xl hover:bg-blue-700 shadow-md transition active:scale-[0.98] flex items-center justify-center gap-2"><i data-lucide="search" class="w-5 h-5"></i> ស្វែងរក & ទូទាត់</button></div>
                     </form>
                 </div>`;
 
-            let activeFormHtml;
-            if (isEditing) activeFormHtml = standardFormHtml;
-            else if (isQuickWithdraw) activeFormHtml = quickWithdrawFormHtml;
-            else activeFormHtml = standardFormHtml; 
+            let activeFormHtml = (isEditing || isDeposit) ? standardFormHtml : quickWithdrawFormHtml;
+            if(isQuickWithdraw && isEditing) activeFormHtml = standardFormHtml; 
 
-            // CENTERED POSTS
-            const postsHtml = state.posts.length > 0 ? `
-                <div class="flex flex-col items-center gap-4 mb-6 w-full">
-                    ${state.posts.map(post => `
-                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 hover:shadow-md transition w-full max-w-2xl">
-                            <div class="flex items-start gap-3">
-                                <div class="bg-blue-50 p-2 rounded-full text-blue-600 shrink-0"><i data-lucide="megaphone" class="w-5 h-5"></i></div>
-                                <div>
-                                    <h4 class="font-bold text-gray-800 text-lg">${post.title}</h4>
-                                    <p class="text-sm text-gray-600 mt-1 leading-relaxed">${post.content || ''}</p>
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            ` : '';
+            const postsHtml = state.posts.length > 0 ? `<div class="flex flex-col items-center gap-4 mb-6 w-full">${state.posts.map(p => `<div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 hover:shadow-md transition w-full max-w-2xl"><div class="flex items-start gap-3"><div class="bg-blue-50 p-2 rounded-full text-blue-600 shrink-0"><i data-lucide="megaphone" class="w-5 h-5"></i></div><div><h4 class="font-bold text-gray-800 text-lg">${p.title}</h4><p class="text-sm text-gray-600 mt-1 leading-relaxed">${p.content || ''}</p></div></div></div>`).join('')}</div>` : '';
 
-            // Table HTML
-            const allowAdd = isAdmin && isDeposit; 
             let bodyContent = '';
-
             if (isQuickWithdraw) {
-                bodyContent = `
-                    <div class="max-w-6xl mx-auto space-y-4">
-                        ${postsHtml}
-                        ${activeFormHtml}
-                    </div>
-                `;
+                bodyContent = `<div class="max-w-6xl mx-auto space-y-4">${postsHtml}${activeFormHtml}</div>`;
             } else {
                 const title = isDeposit ? 'បញ្ជីវេរចូល' : 'របាយការណ៍ដកប្រាក់';
-                
-                // --- REPORTS SUMMARY LOGIC ---
                 let summaryHtml = '';
                 if (isWithdrawReports) {
                     let reportData = state.transactions;
-                    if (isAdmin && state.filterUser) {
-                        reportData = reportData.filter(t => t.user_email === state.filterUser);
-                    }
-                    if (state.filterMonth) {
-                        reportData = reportData.filter(t => t.created_at.startsWith(state.filterMonth));
-                    }
-                    
+                    if (isAdmin && state.filterUser) reportData = reportData.filter(t => t.user_email === state.filterUser);
+                    if (state.filterMonth) reportData = reportData.filter(t => t.created_at.startsWith(state.filterMonth));
                     const totalCount = reportData.length;
-                    const totalsByCurrency = reportData.reduce((acc, curr) => {
-                        const currCode = curr.currency || 'USD';
-                        acc[currCode] = (acc[currCode] || 0) + curr.amount;
-                        return acc;
-                    }, {});
-
-                    const totalAmountStr = Object.entries(totalsByCurrency)
-                        .map(([curr, amt]) => `<div class="font-mono text-blue-600">${amt.toFixed(2)} <span class="text-xs text-gray-500">${curr}</span></div>`)
-                        .join('') || '<div class="text-gray-400">0.00</div>';
-
-                    let filterHtml = '';
-                    if (isAdmin) {
-                        const uniqueUsers = [...new Set(state.transactions.map(t => t.user_email))];
-                        filterHtml = `
-                            <select onchange="setFilterUser(this.value)" class="w-full sm:w-auto p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm">
-                                <option value="">បង្ហាញទិន្នន័យសរុប (All Users)</option>
-                                ${uniqueUsers.map(email => `<option value="${email}" ${state.filterUser === email ? 'selected' : ''}>${email}</option>`).join('')}
-                            </select>
-                        `;
-                    }
-
-                    summaryHtml = `
-                        <div class="mb-6 space-y-4">
-                            <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                                ${filterHtml}
-                                <div class="flex items-center gap-2 w-full sm:w-auto">
-                                    <input type="month" onchange="setFilterMonth(this.value)" value="${state.filterMonth}" class="flex-1 w-full sm:w-auto p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm">
-                                    <button onclick="handlePrint()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg border border-gray-300 shadow-sm transition" title="Print">
-                                        <i data-lucide="printer" class="w-5 h-5"></i>
-                                    </button>
-                                    <select onchange="setPrintSize(this.value)" class="p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm w-20">
-                                        <option value="A4" ${state.printSize === 'A4' ? 'selected' : ''}>A4</option>
-                                        <option value="A5" ${state.printSize === 'A5' ? 'selected' : ''}>A5</option>
-                                        <option value="A6" ${state.printSize === 'A6' ? 'selected' : ''}>A6</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
-                                    <span class="text-gray-500 text-xs uppercase font-bold tracking-wider">ចំនួនវិក្កយបត្រ</span>
-                                    <span class="text-2xl font-bold text-gray-800 mt-1">${totalCount}</span>
-                                </div>
-                                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
-                                    <span class="text-gray-500 text-xs uppercase font-bold tracking-wider">ទឹកប្រាក់សរុប</span>
-                                    <div class="mt-1 text-xl font-bold flex flex-col items-center">
-                                        ${totalAmountStr}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                    const totalsByCurrency = reportData.reduce((acc, curr) => { const c = curr.currency||'USD'; acc[c] = (acc[c]||0)+curr.amount; return acc; }, {});
+                    const totalAmountStr = Object.entries(totalsByCurrency).map(([c, a]) => `<div class="font-mono text-blue-600">${a.toFixed(2)} <span class="text-xs text-gray-500">${c}</span></div>`).join('') || '<div class="text-gray-400">0.00</div>';
+                    let filterHtml = isAdmin ? `<select onchange="setFilterUser(this.value)" class="w-full sm:w-auto p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm"><option value="">បង្ហាញទិន្នន័យសរុប (All Users)</option>${[...new Set(state.transactions.map(t => t.user_email))].map(email => `<option value="${email}" ${state.filterUser === email ? 'selected' : ''}>${email}</option>`).join('')}</select>` : '';
+                    summaryHtml = `<div class="mb-6 space-y-4"><div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center">${filterHtml}<div class="flex items-center gap-2 w-full sm:w-auto"><input type="month" onchange="setFilterMonth(this.value)" value="${state.filterMonth}" class="flex-1 w-full sm:w-auto p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm"><button onclick="handlePrint()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg border border-gray-300 shadow-sm transition"><i data-lucide="printer" class="w-5 h-5"></i></button><select onchange="setPrintSize(this.value)" class="p-2 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm w-20"><option value="A4" ${state.printSize === 'A4'?'selected':''}>A4</option><option value="A5" ${state.printSize === 'A5'?'selected':''}>A5</option><option value="A6" ${state.printSize === 'A6'?'selected':''}>A6</option></select></div></div><div class="grid grid-cols-2 gap-4"><div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center"><span class="text-gray-500 text-xs uppercase font-bold tracking-wider">ចំនួនវិក្កយបត្រ</span><span class="text-2xl font-bold text-gray-800 mt-1">${totalCount}</span></div><div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center"><span class="text-gray-500 text-xs uppercase font-bold tracking-wider">ទឹកប្រាក់សរុប</span><div class="mt-1 text-xl font-bold flex flex-col items-center">${totalAmountStr}</div></div></div></div>`;
                 }
 
+                const allowAdd = isAdmin && isDeposit;
                 bodyContent = `
                     <div class="max-w-6xl mx-auto">
-                        <div class="flex justify-between items-center mb-4 px-1">
-                            <h2 class="text-xl font-bold text-gray-800">${title}</h2>
-                            ${allowAdd ? `
-                                <button onclick="toggleForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-bold shadow-sm active:scale-95 transition text-sm">
-                                    <i data-lucide="${state.showForm?'list':'plus'}" class="w-4 h-4"></i> 
-                                    <span>${state.showForm?'បញ្ជី':'បន្ថែម'}</span>
-                                </button>` 
-                            : ''}
-                        </div>
-                        
+                        <div class="flex justify-between items-center mb-4 px-1"><h2 class="text-xl font-bold text-gray-800">${title}</h2>${allowAdd ? `<button onclick="toggleForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-bold shadow-sm active:scale-95 transition text-sm"><i data-lucide="${state.showForm?'list':'plus'}" class="w-4 h-4"></i> <span>${state.showForm?'បញ្ជី':'បន្ថែម'}</span></button>` : ''}</div>
                         ${summaryHtml}
-
                         ${!allowAdd && !state.showForm && isDeposit ? '<div class="bg-blue-50 text-blue-800 p-3 rounded-lg mb-4 text-sm border border-blue-100 flex gap-2"><i data-lucide="eye" class="w-4 h-4 mt-0.5"></i> Read Only Mode</div>' : ''}
-                        
-                        ${state.showForm ? activeFormHtml : `
-                            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                <div class="overflow-x-auto">
-                                    <table class="w-full text-left">
-                                        <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-semibold tracking-wider">
-                                            <tr>
-                                                <th class="p-4 whitespace-nowrap">កាលបរិច្ឆេទ</th>
-                                                <th class="p-4 whitespace-nowrap">Invoice</th>
-                                                <th class="p-4 whitespace-nowrap text-right">ទឹកប្រាក់</th>
-                                                <th class="p-4 whitespace-nowrap">ឈ្មោះ</th>
-                                                <th class="p-4 whitespace-nowrap">ធនាគារ</th>
-                                                ${isDeposit ? '<th class="p-4 text-center whitespace-nowrap">ស្ថានភាព</th>' : ''}
-                                                <th class="p-4 whitespace-nowrap">User</th>
-                                                ${isAdmin ? '<th class="p-4 text-right whitespace-nowrap">សកម្មភាព</th>' : ''}
-                                            </tr>
-                                        </thead>
-                                        <tbody id="transaction-table-body" class="text-sm divide-y divide-gray-100"></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        `}
-                    </div>
-                `;
+                        ${state.showForm ? activeFormHtml : `<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-left"><thead class="bg-gray-50 text-xs uppercase text-gray-500 font-semibold tracking-wider"><tr><th class="p-4 whitespace-nowrap">កាលបរិច្ឆេទ</th><th class="p-4 whitespace-nowrap">Invoice</th><th class="p-4 whitespace-nowrap text-right">ទឹកប្រាក់</th><th class="p-4 whitespace-nowrap">ឈ្មោះ</th><th class="p-4 whitespace-nowrap">ធនាគារ</th>${isDeposit ? '<th class="p-4 text-center whitespace-nowrap">ស្ថានភាព</th>' : ''}<th class="p-4 whitespace-nowrap">User</th>${isAdmin ? '<th class="p-4 text-right whitespace-nowrap">សកម្មភាព</th>' : ''}</tr></thead><tbody id="transaction-table-body" class="text-sm divide-y divide-gray-100"></tbody></table></div></div>`}
+                    </div>`;
             }
-
             container.innerHTML = bodyContent;
-            
             lucide.createIcons();
-            
-            if(isQuickWithdraw) {
-               focusInput('withdraw_invoice');
-            }
-
+            if(isQuickWithdraw) focusInput('withdraw_invoice');
             if(document.getElementById('transaction-form')) document.getElementById('transaction-form').addEventListener('submit', handleTransactionSubmit);
-            
-            if (!isQuickWithdraw && !state.showForm && state.transactions.length > 0) {
-                renderTransactionTable();
-            } else if (!isQuickWithdraw && !state.showForm && state.transactions.length === 0) {
-                 const tbody = document.getElementById('transaction-table-body');
-                 if(tbody) {
-                     tbody.innerHTML = '<tr><td colspan="8" class="p-12 text-center text-gray-400 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-12 h-12 opacity-50"></i><span>គ្មានទិន្នន័យ</span></td></tr>'; 
-                     lucide.createIcons();
-                 }
-            }
+            if (!isQuickWithdraw && !state.showForm && state.transactions.length > 0) renderTransactionTable();
+            else if (!isQuickWithdraw && !state.showForm && state.transactions.length === 0) { const tbody = document.getElementById('transaction-table-body'); if(tbody) { tbody.innerHTML = '<tr><td colspan="8" class="p-12 text-center text-gray-400 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-12 h-12 opacity-50"></i><span>គ្មានទិន្នន័យ</span></td></tr>'; lucide.createIcons(); } }
         }
 
-        // ... (Keep existing renderSettingsContent) ...
         function renderSettingsContent() {
             const container = document.getElementById('main-content');
-            
             const renderConfigSection = (title, items, table, placeholder, fieldName = 'name') => {
                 const isEditing = state.editingSetting && state.editingSetting.table === table;
                 const editValue = isEditing ? (state.editingSetting[fieldName] || state.editingSetting.code) : '';
-                
                 return `
-                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-                    <h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">${title}</h3>
-                    <div class="flex gap-2 mb-4">
-                        <input type="text" id="new-${table}" placeholder="${placeholder}" class="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${editValue}">
-                        ${isEditing ? 
-                            `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700 font-medium">Update</button>
-                             <button onclick="cancelEditSetting()" class="bg-gray-100 text-gray-700 px-4 rounded-lg hover:bg-gray-200 font-medium">Cancel</button>`
-                            : 
-                            `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-green-600 text-white px-4 rounded-lg hover:bg-green-700 font-medium">បន្ថែម</button>`
-                        }
-                    </div>
-                    <ul class="space-y-2">
-                        ${items.map(item => `
-                            <li class="flex justify-between items-center bg-gray-50 p-3 rounded-lg group hover:bg-gray-100 transition">
-                                <div class="flex items-center gap-3">
-                                    <button onclick="setDefault('${table}', '${item.id}')" title="Set as Default">
-                                        <i data-lucide="star" class="w-5 h-5 ${item.is_default ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300 hover:text-yellow-400'}"></i>
-                                    </button>
-                                    <span class="font-medium text-gray-700">${item.name || item.code}</span>
-                                </div>
-                                <div class="flex gap-2 opacity-100 sm:opacity-50 group-hover:opacity-100 transition-opacity">
-                                    <button onclick="prepareEditSetting('${table}', '${item.id}')" class="text-blue-500 hover:bg-blue-100 p-1 rounded"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                                    <button onclick="deleteSettingItem('${table}', '${item.id}')" class="text-red-500 hover:bg-red-100 p-1 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                                </div>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>`;
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6"><h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">${title}</h3><div class="flex gap-2 mb-4"><input type="text" id="new-${table}" placeholder="${placeholder}" class="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${editValue}">${isEditing ? `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700 font-medium">Update</button><button onclick="cancelEditSetting()" class="bg-gray-100 text-gray-700 px-4 rounded-lg hover:bg-gray-200 font-medium">Cancel</button>` : `<button onclick="saveSetting('${table}', 'new-${table}')" class="bg-green-600 text-white px-4 rounded-lg hover:bg-green-700 font-medium">បន្ថែម</button>`}</div><ul class="space-y-2">${items.map(item => `<li class="flex justify-between items-center bg-gray-50 p-3 rounded-lg group hover:bg-gray-100 transition"><div class="flex items-center gap-3"><button onclick="setDefault('${table}', '${item.id}')" title="Set as Default"><i data-lucide="star" class="w-5 h-5 ${item.is_default ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300 hover:text-yellow-400'}"></i></button><span class="font-medium text-gray-700">${item.name || item.code}</span></div><div class="flex gap-2 opacity-100 sm:opacity-50 group-hover:opacity-100 transition-opacity"><button onclick="prepareEditSetting('${table}', '${item.id}')" class="text-blue-500 hover:bg-blue-100 p-1 rounded"><i data-lucide="edit-2" class="w-4 h-4"></i></button><button onclick="deleteSettingItem('${table}', '${item.id}')" class="text-red-500 hover:bg-red-100 p-1 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></li>`).join('')}</ul></div>`;
             };
-
             const postSection = `
-                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-                    <h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">ព័ត៌មាន & ពាណិជ្ជកម្ម (Posts)</h3>
-                    <div class="space-y-3 mb-4 border p-4 rounded-lg bg-gray-50">
-                        <input type="text" id="post-title" placeholder="ចំណងជើង (Title)" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${state.editingSetting?.table === 'posts' ? state.editingSetting.title : ''}">
-                        <textarea id="post-content" placeholder="ខ្លឹមសារ (Content)" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" rows="2">${state.editingSetting?.table === 'posts' ? state.editingSetting.content : ''}</textarea>
-                        <div class="flex gap-2">
-                            ${state.editingSetting?.table === 'posts' ? 
-                                `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700">Update Post</button>
-                                 <button onclick="cancelEditSetting()" class="w-1/3 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold">Cancel</button>`
-                                : 
-                                `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700">បង្ហោះ Post</button>`
-                            }
-                        </div>
-                    </div>
-                    <div class="space-y-3">
-                        ${state.posts.map(post => `
-                            <div class="bg-white border rounded-lg p-3 flex justify-between items-start group hover:shadow-sm transition">
-                                <div>
-                                    <h4 class="font-bold text-sm text-gray-800">${post.title}</h4>
-                                    <p class="text-xs text-gray-500 mt-1">${post.content || '-'}</p>
-                                </div>
-                                <div class="flex flex-col gap-2 opacity-100 sm:opacity-50 group-hover:opacity-100">
-                                    <button onclick="prepareEditSetting('posts', '${post.id}')" class="text-blue-500 hover:bg-blue-50 p-1 rounded"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                                    <button onclick="deleteSettingItem('posts', '${post.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-
-            const userSection = `
-                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-                    <div class="flex justify-between items-center mb-4 border-b pb-2">
-                         <h3 class="font-bold text-lg text-gray-700">គ្រប់គ្រងអ្នកប្រើប្រាស់ (Users)</h3>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead class="bg-gray-50">
-                                <tr><th class="p-3 text-gray-600">Email</th><th class="p-3 text-gray-600">Role</th><th class="p-3 text-right text-gray-600">Actions</th></tr>
-                            </thead>
-                            <tbody class="divide-y">
-                                ${state.users.map(u => `
-                                    <tr>
-                                        <td class="p-3 font-medium text-gray-700">${u.email.split('@')[0]}</td>
-                                        <td class="p-3">
-                                            <select onchange="updateUserRole('${u.id}', this.value)" class="border rounded p-1 text-xs ${u.role==='admin'?'text-blue-600 font-bold bg-blue-50':''}">
-                                                <option value="user" ${u.role==='user'?'selected':''}>User</option>
-                                                <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
-                                            </select>
-                                        </td>
-                                        <td class="p-3 text-right">
-                                            <button onclick="deleteUser('${u.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded"><i data-lucide="trash" class="w-4 h-4"></i></button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>`;
-
-            // Report Actions Toggle Section
-            const reportActionToggle = `
-                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-                    <h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">ការកំណត់ប្រព័ន្ធ (System Config)</h3>
-                    <div class="flex items-center justify-between">
-                        <span class="text-gray-700 font-medium">អនុញ្ញាតឱ្យកែប្រែ/លុប របាយការណ៍ (Enable Edit/Delete)</span>
-                        <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
-                            <input type="checkbox" name="toggle" id="toggle-report-actions" 
-                                class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-all duration-300 ${state.allowReportActions ? 'right-0 border-blue-600' : 'left-0 border-gray-300'}"
-                                ${state.allowReportActions ? 'checked' : ''}
-                                onclick="toggleReportActions()"/>
-                            <label for="toggle-report-actions" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer ${state.allowReportActions ? 'bg-blue-600' : ''}"></label>
-                        </div>
-                    </div>
-                    <p class="text-xs text-gray-500 mt-2">បើកមុខងារនេះដើម្បីបង្ហាញប៊ូតុង Edit និង Delete នៅក្នុងទំព័ររបាយការណ៍ដកប្រាក់។</p>
-                </div>
-            `;
-
-            container.innerHTML = `
-                <div class="max-w-6xl mx-auto">
-                    <h2 class="text-2xl font-bold mb-6 px-1">ការកំណត់ (Settings)</h2>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div>
-                            ${reportActionToggle} <!-- Added Toggle Here -->
-                            ${postSection}
-                            ${renderConfigSection('ធនាគារ (Banks)', state.banks, 'banks', 'ឈ្មោះធនាគារ')}
-                            ${renderConfigSection('រូបិយប័ណ្ណ (Currencies)', state.currencies, 'currencies', 'Code (e.g. THB)', 'code')}
-                        </div>
-                        <div>
-                            ${userSection}
-                        </div>
-                    </div>
-                </div>`;
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6"><h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">ព័ត៌មាន & ពាណិជ្ជកម្ម (Posts)</h3><div class="space-y-3 mb-4 border p-4 rounded-lg bg-gray-50"><input type="text" id="post-title" placeholder="ចំណងជើង (Title)" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value="${state.editingSetting?.table === 'posts' ? state.editingSetting.title : ''}"><textarea id="post-content" placeholder="ខ្លឹមសារ (Content)" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" rows="2">${state.editingSetting?.table === 'posts' ? state.editingSetting.content : ''}</textarea><div class="flex gap-2">${state.editingSetting?.table === 'posts' ? `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700">Update Post</button><button onclick="cancelEditSetting()" class="w-1/3 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold">Cancel</button>` : `<button onclick="saveSetting('posts', 'post-title')" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700">បង្ហោះ Post</button>`}</div></div><div class="space-y-3">${state.posts.map(post => `<div class="bg-white border rounded-lg p-3 flex justify-between items-start group hover:shadow-sm transition"><div><h4 class="font-bold text-sm text-gray-800">${post.title}</h4><p class="text-xs text-gray-500 mt-1">${post.content || '-'}</p></div><div class="flex flex-col gap-2 opacity-100 sm:opacity-50 group-hover:opacity-100"><button onclick="prepareEditSetting('posts', '${post.id}')" class="text-blue-500 hover:bg-blue-50 p-1 rounded"><i data-lucide="edit-2" class="w-4 h-4"></i></button><button onclick="deleteSettingItem('posts', '${post.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`).join('')}</div></div>`;
+            const userSection = `<div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6"><div class="flex justify-between items-center mb-4 border-b pb-2"><h3 class="font-bold text-lg text-gray-700">គ្រប់គ្រងអ្នកប្រើប្រាស់ (Users)</h3></div><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-gray-50"><tr><th class="p-3 text-gray-600">Email</th><th class="p-3 text-gray-600">Role</th><th class="p-3 text-right text-gray-600">Actions</th></tr></thead><tbody class="divide-y">${state.users.map(u => `<tr><td class="p-3 font-medium text-gray-700">${u.email.split('@')[0]}</td><td class="p-3"><select onchange="updateUserRole('${u.id}', this.value)" class="border rounded p-1 text-xs ${u.role==='admin'?'text-blue-600 font-bold bg-blue-50':''}"><option value="user" ${u.role==='user'?'selected':''}>User</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select></td><td class="p-3 text-right"><button onclick="deleteUser('${u.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded"><i data-lucide="trash" class="w-4 h-4"></i></button></td></tr>`).join('')}</tbody></table></div></div>`;
+            const reportActionToggle = `<div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6 opacity-75"><h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">ការកំណត់ប្រព័ន្ធ (System Config)</h3><div class="flex items-center justify-between"><span class="text-gray-700 font-medium">អនុញ្ញាតឱ្យកែប្រែ/លុប របាយការណ៍ (Enable Edit/Delete)</span><div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in"><input type="checkbox" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-not-allowed transition-all duration-300 ${state.allowReportActions ? 'right-0 border-blue-600' : 'left-0 border-gray-300'}" ${state.allowReportActions ? 'checked' : ''} disabled /><label class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-not-allowed ${state.allowReportActions ? 'bg-blue-600' : ''}"></label></div></div><p class="text-xs text-gray-500 mt-2">មុខងារនេះត្រូវបានបិទជាបណ្តោះអាសន្ន (Disabled temporarily)។</p></div>`;
+            container.innerHTML = `<div class="max-w-6xl mx-auto"><h2 class="text-2xl font-bold mb-6 px-1">ការកំណត់ (Settings)</h2><div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div>${reportActionToggle}${postSection}${renderConfigSection('ធនាគារ (Banks)', state.banks, 'banks', 'ឈ្មោះធនាគារ')}${renderConfigSection('រូបិយប័ណ្ណ (Currencies)', state.currencies, 'currencies', 'Code (e.g. THB)', 'code')}</div><div>${userSection}</div></div></div>`;
             lucide.createIcons();
         }
 
         function renderTransactionTable() {
             const tbody = document.getElementById('transaction-table-body');
             if(!tbody) return;
-            
-            // FILTER FOR TABLE VIEW
             let displayData = state.transactions;
-            
             if (state.activeTab === 'withdraw_reports') {
-                if (state.role === 'admin' && state.filterUser) {
-                    displayData = displayData.filter(t => t.user_email === state.filterUser);
-                }
-                if (state.filterMonth) {
-                    displayData = displayData.filter(t => t.created_at.startsWith(state.filterMonth));
-                }
+                if (state.role === 'admin' && state.filterUser) displayData = displayData.filter(t => t.user_email === state.filterUser);
+                if (state.filterMonth) displayData = displayData.filter(t => t.created_at.startsWith(state.filterMonth));
             }
-
-            if(displayData.length === 0) { 
-                tbody.innerHTML = '<tr><td colspan="8" class="p-12 text-center text-gray-400 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-12 h-12 opacity-50"></i><span>គ្មានទិន្នន័យ</span></td></tr>'; 
-                lucide.createIcons(); 
-                return; 
-            }
+            if(displayData.length === 0) { tbody.innerHTML = '<tr><td colspan="8" class="p-12 text-center text-gray-400 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-12 h-12 opacity-50"></i><span>គ្មានទិន្នន័យ</span></td></tr>'; lucide.createIcons(); return; }
             
             const isDeposit = state.activeTab === 'deposit';
             const isAdmin = state.role === 'admin';
-            
-            // Check Setting Permission
             const canModify = isAdmin && state.allowReportActions;
 
             tbody.innerHTML = displayData.map(tx => {
                 const isCompleted = tx.status === 'completed';
-                const badgeClass = isCompleted 
-                    ? 'bg-green-100 text-green-700 border-green-200' 
-                    : 'bg-yellow-100 text-yellow-700 border-yellow-200';
-                
+                const badgeClass = isCompleted ? 'bg-green-100 text-green-700 border-green-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200';
                 const withdrawer = tx.withdrawn_by ? tx.withdrawn_by.split('@')[0] : 'គណនេយ្យ';
                 const badgeText = isCompleted ? `បានដក(${withdrawer})` : 'មិនទាន់ដក';
+                const statusCell = isDeposit ? `<td class="p-4 text-center"><span class="px-3 py-1 rounded-full text-xs font-bold border ${badgeClass}">${badgeText}</span></td>` : '';
+                const actionCell = canModify ? `<td class="p-4 text-right"><div class="flex justify-end gap-3"><button onclick="editTransaction('${tx.id}')" class="text-blue-600 hover:text-blue-800 transition" title="Edit"><i data-lucide="pencil" class="w-5 h-5"></i></button><button onclick="deleteTransaction('${tx.id}')" class="text-red-600 hover:text-red-800 transition" title="Delete"><i data-lucide="trash-2" class="w-5 h-5"></i></button></div></td>` : (isAdmin ? `<td class="p-4 text-right text-gray-400 text-xs">Locked</td>` : '');
+                
+                const txDate = new Date(tx.created_at);
+                const dateDisplay = txDate.toLocaleDateString('km-KH');
+                const timeDisplay = txDate.toLocaleTimeString('km-KH', {hour: '2-digit', minute:'2-digit'});
 
-                const statusCell = isDeposit ? `
-                    <td class="p-4 text-center">
-                        <span class="px-3 py-1 rounded-full text-xs font-bold border ${badgeClass}">
-                            ${badgeText}
-                        </span>
-                    </td>
-                ` : '';
-
-                // Show Actions ONLY if Admin AND Setting is Enabled
-                const actionCell = canModify ? `
-                    <td class="p-4 text-right">
-                        <div class="flex justify-end gap-3">
-                            <button onclick="editTransaction('${tx.id}')" class="text-blue-600 hover:text-blue-800 transition" title="Edit">
-                                <i data-lucide="pencil" class="w-5 h-5"></i>
-                            </button>
-                            <button onclick="deleteTransaction('${tx.id}')" class="text-red-600 hover:text-red-800 transition" title="Delete">
-                                <i data-lucide="trash-2" class="w-5 h-5"></i>
-                            </button>
-                        </div>
-                    </td>
-                ` : (isAdmin ? `<td class="p-4 text-right text-gray-400 text-xs">Locked</td>` : '');
-
-                return `
-                <tr class="hover:bg-blue-50/50 transition border-b group">
-                    <td class="p-4 whitespace-nowrap text-gray-700">${new Date(tx.created_at).toLocaleDateString('km-KH')}</td>
-                    <td class="p-4 font-mono text-blue-600 text-xs font-bold bg-gray-50 rounded px-2 w-fit">${tx.invoice_number || '-'}</td>
-                    <td class="p-4 text-right font-bold ${isDeposit ? 'text-green-600' : 'text-red-600'} whitespace-nowrap">
-                        ${isDeposit?'+':'-'} ${tx.amount.toFixed(2)} <span class="text-xs text-gray-500 font-normal">${tx.currency || ''}</span>
-                    </td>
-                    <td class="p-4 font-medium text-gray-800">${tx.account_name || '-'}</td>
-                    <td class="p-4"><span class="bg-white border border-gray-200 px-2 py-1 rounded text-xs font-medium text-gray-600 shadow-sm">${tx.bank_name || 'N/A'}</span></td>
-                    ${statusCell}
-                    <td class="p-4 text-xs text-gray-500 truncate max-w-[100px]" title="${tx.user_email}">${tx.user_email.split('@')[0]}</td>
-                    ${actionCell}
-                </tr>
-            `}).join('');
-            
+                return `<tr class="hover:bg-blue-50/50 transition border-b group"><td class="p-4 whitespace-nowrap text-gray-700">${dateDisplay}<div class="text-xs text-gray-500 mt-0.5">${timeDisplay}</div></td><td class="p-4 font-mono text-blue-600 text-xs font-bold bg-gray-50 rounded px-2 w-fit">${tx.invoice_number || '-'}</td><td class="p-4 text-right font-bold ${isDeposit ? 'text-green-600' : 'text-red-600'} whitespace-nowrap">${isDeposit?'+':'-'} ${tx.amount.toFixed(2)} <span class="text-xs text-gray-500 font-normal">${tx.currency || ''}</span></td><td class="p-4 font-medium text-gray-800">${tx.account_name || '-'}</td><td class="p-4"><span class="bg-white border border-gray-200 px-2 py-1 rounded text-xs font-medium text-gray-600 shadow-sm">${tx.bank_name || 'N/A'}</span></td>${statusCell}<td class="p-4 text-xs text-gray-500 truncate max-w-[100px]" title="${tx.user_email}">${tx.user_email.split('@')[0]}</td>${actionCell}</tr>`;
+            }).join('');
             if(isAdmin) lucide.createIcons();
         }
 
